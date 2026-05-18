@@ -1,7 +1,18 @@
 @import "tailwindcss";
 
-/* 🛡️ 核心修復：使用 Tailwind v4 的 @source 指令，強制管線掃描我們的解耦特區 */
+/* 🛡️ 核心防禦線：強制命令 Tailwind CSS v4 編譯器深度掃描解耦架構特區 */
 @source "../core";
 @source "../modules";
 
-/* 如果下方原本有 Next.js 自動產生的 :root 變數，可以保留或刪除，不影響畫面 */
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #0f172a;
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
