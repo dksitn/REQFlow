@@ -4,25 +4,31 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, HelpCircle, Lock, ChevronDown, Check, X, Save, Sparkles } from 'lucide-react';
 
-// 導入 DEC-001 解耦模組元件
 import DraftRecoveryModal from '@/modules/M02_ProjectAssessment/components/DraftRecoveryModal';
 import ImageControlBox from '@/modules/M02_ProjectAssessment/components/ImageControlBox';
 import AdvancedEvaluationGrid from '@/modules/M02_ProjectAssessment/components/AdvancedEvaluationGrid';
 
-export default function ProjectAssessmentDetailPage() {
-  // --- 草稿彈窗狀態機制 ---
-  const [isDraftOpen, setIsDraftOpen] = useState(false);
+// 🛡️ 核心修復：告訴 Next.js 靜態編譯器，請幫我把以下這幾個假資料 ID 都編譯成實體的 HTML
+export function generateStaticParams() {
+  return [
+    { id: 'REQ-2026-001' },
+    { id: 'REQ-2026-002' },
+    { id: 'REQ-2026-003' },
+    { id: 'REQ-2026-004' },
+    { id: 'REQ-2026-006' },
+    { id: 'REQ-2026-008' },
+  ];
+}
 
-  // --- 專案狀態單選彈窗控制 ---
+export default function ProjectAssessmentDetailPage() {
+  const [isDraftOpen, setIsDraftOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [currentStatus, setCurrentStatus] = useState('應用科評估完成');
   const statusOptions = ['需求單位討論', '需求單位送單', '應用科評估完成', '智金處評估完成', 'POC案執行中', '專案處理'];
 
-  // --- 欄位級編輯控制狀態 ---
   const [isEditingPain, setIsEditingPain] = useState(false);
   const [painText, setPainText] = useState('現行消金會員推薦散落在各渠道系統，資料每週才更新一次，無法做到跨通路的即時行為標籤反饋，導致黃金行銷時間流失。');
 
-  // 嚴格對齊 2.2 人員指定名單與科別標籤
   const appSectionOwners = ['趙俊安（應用科）', '邱仕翔（應用科）'];
   const planSectionOwners = ['任文燕（企劃科）'];
   const techSectionOwners = ['謝琇旻（科技科）', '郭珊珊（科技科）'];
@@ -44,7 +50,6 @@ export default function ProjectAssessmentDetailPage() {
           </div>
         </div>
         
-        {/* 特效測試按鈕：用來手動喚醒系統暫存備援彈窗 */}
         <button 
           onClick={() => setIsDraftOpen(true)}
           className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-lg shadow-sm hover:bg-amber-100 transition-colors"
@@ -54,12 +59,7 @@ export default function ProjectAssessmentDetailPage() {
         </button>
       </div>
 
-      {/* =========================================================================
-          第一段：基本資料 + 負責人 + 6大評估內容 + 圖片對照 (平鋪垂直滾動)
-          ========================================================================= */}
       <div className="space-y-6">
-        
-        {/* 1. 基本資訊與狀態彈窗 */}
         <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm shadow-slate-100/30 flex items-center justify-between relative">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -70,7 +70,6 @@ export default function ProjectAssessmentDetailPage() {
             <p className="text-xs text-slate-400 font-medium">需求單位：消金暨信用卡總處</p>
           </div>
 
-          {/* 狀態客製化彈窗單選按鈕 */}
           <div className="relative">
             <button 
               onClick={() => setIsStatusOpen(!isStatusOpen)}
@@ -102,7 +101,6 @@ export default function ProjectAssessmentDetailPage() {
           </div>
         </div>
 
-        {/* 2. 三科別負責人指派區 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div className="border border-slate-200/80 rounded-xl p-4 bg-white shadow-sm flex flex-col justify-between">
             <div>
@@ -135,14 +133,12 @@ export default function ProjectAssessmentDetailPage() {
           </div>
         </div>
 
-        {/* 3. 專案評估文字卡片區 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">工作職掌與現行工作流程</h3>
             <p className="text-xs text-slate-700 font-semibold leading-relaxed">消金推廣人員手動自業務系統撈取上週報表，經 Excel 篩選後，再匯入個別通路系統執行單點行銷。</p>
           </div>
 
-          {/* 欄位級鎖定/取消保存機制展示 */}
           <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm relative group">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">現行作業痛點</h3>
@@ -179,17 +175,12 @@ export default function ProjectAssessmentDetailPage() {
           </div>
         </div>
 
-        {/* 4. As-Is / To-Be 流程圖控組件 */}
         <ImageControlBox />
 
       </div>
 
-      {/* =========================================================================
-          第二段：進階綜合評估矩陣 (同一頁向下捲動平鋪解鎖)
-          ========================================================================= */}
       <AdvancedEvaluationGrid />
 
-      {/* 後台備援彈出視窗 */}
       <DraftRecoveryModal 
         isOpen={isDraftOpen} 
         onClose={() => setIsDraftOpen(false)} 
