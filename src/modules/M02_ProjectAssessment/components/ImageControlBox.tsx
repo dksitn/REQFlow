@@ -1,105 +1,113 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Eye, UploadCloud, X, Columns, Layout, Maximize2, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { supabase } from '@/core/client/supabase';
 
 export default function ImageControlBox() {
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'COMPARE' | 'AS_IS' | 'TO_BE'>('COMPARE');
+  const [isUploading, setIsUploading] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 處理真實的檔案上傳邏輯
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+
+    try {
+      // 1. 產生一個不重複的隨機檔案名稱，避免覆蓋
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const filePath = `diagrams/${fileName}`;
+
+      // 2. 上傳到剛剛建立的 project-images Bucket
+      const { error: uploadError } = await supabase.storage
+        .from('project-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 3. 上傳成功後，取得公開的圖片網址 (Public URL)
+      const { data: publicUrlData } = supabase.storage
+        .from('project-images')
+        .getPublicUrl(filePath);
+
+      // 4. 更新畫面狀態，顯示剛上傳的圖片
+      setImageUrl(publicUrlData.publicUrl);
+
+    } catch (error) {
+      console.error('上傳失敗:', error);
+      alert('圖片上傳失敗！請檢查是否已在 Supabase 建立 project-images Bucket 並設定 Policies。');
+    } finally {
+      setIsUploading(false);
+      // 清空 input，允許重複選取同一張圖
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeImage = () => {
+    setImageUrl(null);
+    // 實務上可以在這裡加入刪除 Storage 檔案的 API: supabase.storage.from('project-images').remove([filePath])
+  };
 
   return (
-    <div className="border border-slate-200/80 bg-white rounded-xl p-5 shadow-sm select-none">
-      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">四、現現況與目標流程圖對照 (As-Is / To-Be)</div>
-      <div className="text-[10px] text-slate-400 font-medium mb-4 flex items-center gap-1">
-        <AlertCircle className="w-3 h-3 text-indigo-500" />
-        提示規格：支援 <span className="font-mono bg-slate-50 border border-slate-200/50 px-1 rounded text-slate-600">JPG / PNG / WebP</span>，單張不超過 <span className="text-indigo-600 font-bold">2MB</span>
-      </div>
-      
-      {/* 流程圖並排縮圖區 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="border border-slate-200/60 rounded-xl p-4 bg-slate-50/30 flex flex-col items-center justify-center text-center h-40 group hover:border-slate-300 transition-all">
-          <span className="text-xs font-bold text-slate-700">As-Is 流程圖草圖</span>
-          <span className="text-[10px] text-slate-400 mt-1 font-mono">asis_v1.0.png (1.4MB)</span>
-          <div className="flex items-center gap-2 mt-4">
-            <button onClick={() => { setViewMode('AS_IS'); setIsPreviewOpen(true); }} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm hover:bg-slate-50 cursor-pointer"><Eye className="w-3.5 h-3.5 text-slate-400" /> 檢視</button>
-            <button className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-lg text-slate-400 cursor-not-allowed"><UploadCloud className="w-3.5 h-3.5" /> 上傳/替換</button>
-          </div>
-        </div>
-
-        <div className="border border-slate-200/60 rounded-xl p-4 bg-slate-50/30 flex flex-col items-center justify-center text-center h-40 group hover:border-slate-300 transition-all">
-          <span className="text-xs font-bold text-slate-700">To-Be 目標架構圖</span>
-          <span className="text-[10px] text-slate-400 mt-1 font-mono">尚未上傳檔案</span>
-          <div className="flex items-center gap-2 mt-4">
-            <button onClick={() => { setViewMode('TO_BE'); setIsPreviewOpen(true); }} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm hover:bg-slate-50 cursor-pointer"><Eye className="w-3.5 h-3.5 text-slate-400" /> 檢視</button>
-            <button className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg shadow-sm hover:bg-indigo-100 transition-colors cursor-pointer"><UploadCloud className="w-3.5 h-3.5" /> 上傳圖片</button>
-          </div>
-        </div>
+    <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">As-Is / To-Be 系統架構對照</h3>
       </div>
 
-      {/* =========================================================================
-          高階高仿真流程圖檢視彈窗 (Lightbox Container)
-          ========================================================================= */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsPreviewOpen(false)} />
-          
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col z-10 overflow-hidden animate-in zoom-in-95 duration-150">
-            {/* 彈窗控制標頭 */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-bold text-slate-800">高級圖像審查交互中心</span>
-                
-                {/* 模式切換按鈕群 */}
-                <div className="flex items-center border border-slate-200 rounded-lg p-0.5 bg-white shadow-sm">
-                  <button 
-                    onClick={() => setViewMode('COMPARE')}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md transition-all ${viewMode === 'COMPARE' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    <Columns className="w-3 h-3" /> 雙圖對照
-                  </button>
-                  <button 
-                    onClick={() => setViewMode('AS_IS')}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md transition-all ${viewMode === 'AS_IS' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    <Layout className="w-3 h-3" /> 只看 As-Is
-                  </button>
-                  <button 
-                    onClick={() => setViewMode('TO_BE')}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md transition-all ${viewMode === 'TO_BE' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    <Maximize2 className="w-3 h-3" /> 只看 To-Be
-                  </button>
-                </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* As-Is 現行架構 (已上傳範例) */}
+        <div className="border border-slate-200 border-dashed rounded-xl p-2 bg-slate-50/50 flex flex-col items-center justify-center min-h-[220px] relative group overflow-hidden">
+          {imageUrl ? (
+            <>
+              {/* 顯示真實上傳的圖片 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt="Uploaded Diagram" className="w-full h-full object-contain rounded-lg" />
+              <button 
+                onClick={removeImage}
+                className="absolute top-2 right-2 p-1.5 bg-white/90 text-slate-600 rounded-md shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-50 hover:text-rose-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              {/* 隱藏的檔案上傳 Input */}
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+              <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mb-3">
+                {isUploading ? <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" /> : <ImageIcon className="w-5 h-5 text-indigo-600" />}
               </div>
-              <button onClick={() => setIsPreviewOpen(false)} className="text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg p-1 bg-white shadow-sm"><X className="w-4 h-4" /></button>
-            </div>
-
-            {/* 實體圖像仿真模擬渲染畫布 */}
-            <div className="flex-1 bg-slate-900/5 p-6 overflow-auto flex gap-4 justify-center items-center">
-              {(viewMode === 'COMPARE' || viewMode === 'AS_IS') && (
-                <div className="flex-1 border-2 border-dashed border-slate-300 rounded-xl bg-white h-full flex flex-col items-center justify-center p-4 shadow-sm">
-                  <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest border border-slate-200 px-2 py-0.5 rounded bg-slate-50 mb-4">AS-IS CURRENT FLOW CANVAS</span>
-                  <div className="w-24 h-16 bg-slate-100 border border-slate-200 rounded flex items-center justify-center text-[10px] font-bold text-slate-400">Excel 撈報表</div>
-                  <div className="w-0.5 h-6 bg-slate-300"></div>
-                  <div className="w-24 h-16 bg-slate-100 border border-slate-200 rounded flex items-center justify-center text-[10px] font-bold text-slate-400 text-center p-1">手動匯入各通路 (落後7天)</div>
-                </div>
-              )}
-
-              {(viewMode === 'COMPARE' || viewMode === 'TO_BE') && (
-                <div className="flex-1 border-2 border-dashed border-slate-300 rounded-xl bg-indigo-50/20 h-full flex flex-col items-center justify-center p-4 shadow-sm">
-                  <span className="text-xs font-extrabold text-indigo-500 uppercase tracking-widest border border-indigo-100 px-2 py-0.5 rounded bg-indigo-50/50 mb-4">TO-BE TARGET ARCHITECTURE</span>
-                  <div className="flex items-center gap-4">
-                    <div className="w-20 h-14 bg-indigo-600 text-white rounded flex items-center justify-center text-[10px] font-bold text-center p-1 shadow-sm shadow-indigo-100">Kafka 即時流</div>
-                    <div className="w-4 h-0.5 bg-indigo-300"></div>
-                    <div className="w-24 h-14 bg-white border border-indigo-200 rounded flex items-center justify-center text-[10px] font-extrabold text-indigo-600 text-center p-1 shadow-sm">AI 即時模型矩陣 (響應 &lt;50ms)</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+              <p className="text-xs font-bold text-slate-600 mb-1">上傳流程圖或架構圖</p>
+              <p className="text-[10px] text-slate-400 mb-4 text-center px-4">支援 PNG, JPG, GIF 格式，最大 5MB</p>
+              <button 
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isUploading ? '雲端上傳中...' : <><Upload className="w-3.5 h-3.5" /> 選擇檔案</>}
+              </button>
+            </>
+          )}
         </div>
-      )}
 
+        {/* To-Be 規劃架構 (佔位區) */}
+        <div className="border border-slate-200 border-dashed rounded-xl p-2 bg-slate-50/50 flex flex-col items-center justify-center min-h-[220px] opacity-60">
+           <div className="w-10 h-10 rounded-full bg-slate-200/50 flex items-center justify-center mb-3">
+              <Upload className="w-5 h-5 text-slate-400" />
+            </div>
+            <p className="text-xs font-bold text-slate-500">To-Be 目標架構</p>
+            <p className="text-[10px] text-slate-400 mt-1">等待需求釐清後上傳</p>
+        </div>
+      </div>
     </div>
   );
 }
