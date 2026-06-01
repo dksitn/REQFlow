@@ -1,56 +1,131 @@
-'use client'; // 👈 加上 use client，因為我們需要控制彈窗狀態
+'use client';
 
-import React, { useState } from 'react';
-import StatCards from '@/modules/M01_ConsolidatedProjects/components/StatCards';
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/core/client/supabase';
+
+// 🚀 標準、正確、絕不出錯的匯入路徑！
 import ProjectTable from '@/modules/M01_ConsolidatedProjects/components/ProjectTable';
-import AuditSidebar from '@/modules/M01_ConsolidatedProjects/components/AuditSidebar';
-import CreateProjectModal from '@/modules/M01_ConsolidatedProjects/components/CreateProjectModal';
+import CreateProjectModal from '@/components/CreateProjectModal';
+import { Loader2, Plus, FileText, Beaker, Clock, Layers } from 'lucide-react';
 
 export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0); // 👈 用來觸發元件刷新的鑰匙
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [stats, setStats] = useState({ evaluating: 0, poc: 0, pending: 0, total: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 當新增專案成功時，讓 refreshKey + 1，觸發表格跟統計卡重新撈取資料
-  const handleProjectCreated = () => {
-    setRefreshKey(prev => prev + 1);
-  };
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('id', user.id).single();
+          setCurrentUser(profile?.full_name || user.email);
+        }
+
+        const { data: projects, error } = await supabase.from('m01_projects').select('status_name_snapshot, project_type');
+        if (error) throw error;
+
+        const safeProjects = projects || [];
+        
+        const evaluating = safeProjects.filter(p => 
+          ['需求單位討論', '需求單位送單', '應用科評估完成', '智金處評估完成'].includes(p.status_name_snapshot)
+        ).length;
+        
+        const poc = safeProjects.filter(p => 
+          ['POC案執行中', '專案處理'].includes(p.status_name_snapshot)
+        ).length;
+        
+        const pending = safeProjects.filter(p => p.status_name_snapshot === 'Pending中').length;
+
+        setStats({ evaluating, poc, pending, total: safeProjects.length });
+      } catch (error) {
+        console.error('讀取總覽資料失敗:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchDashboardData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen bg-slate-50">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex-1 flex min-w-0 bg-white w-full">
-      <main className="flex-1 bg-slate-50/10 p-8 overflow-y-auto w-full min-w-0 transition-all duration-300">
-        
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-4">
+    <div className="flex-1 flex bg-slate-50/50 w-full min-h-screen">
+      <main className="flex-1 p-8 overflow-y-auto min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">彙整全部專案</h1>
-            <p className="text-xs text-slate-400 font-medium mt-1">
-              歡迎回來，<span className="text-slate-600 font-bold">沈廷翼 Admin</span>。智金處目前所有評估與 POC 案件進度總覽。
+            <p className="text-xs text-slate-500 mt-1 font-medium">
+              歡迎回來，<span className="font-bold text-blue-600">{currentUser || 'Admin'}</span>。智金處目前所有評估與 POC 案件進度總覽。
             </p>
           </div>
           <button 
-            onClick={() => setIsModalOpen(true)} // 👈 點擊開啟彈窗
-            className="bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98] shrink-0 cursor-pointer"
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-all"
           >
-            建立新專案案源
+            <Plus className="w-4 h-4" />
+            建立新專案
           </button>
         </div>
 
-        <div className="mb-6">
-          <StatCards refreshKey={refreshKey} /> {/* 👈 傳入 refreshKey */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-blue-200 transition-all">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4 text-blue-500" />
+                <span className="text-xs font-bold text-slate-500">評估案</span>
+              </div>
+              <div className="text-3xl font-black text-blue-600">{stats.evaluating}</div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 transition-all">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Beaker className="w-4 h-4 text-emerald-500" />
+                <span className="text-xs font-bold text-slate-500">POC案</span>
+              </div>
+              <div className="text-3xl font-black text-emerald-600">{stats.poc}</div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-orange-200 transition-all">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="w-4 h-4 text-orange-500" />
+                <span className="text-xs font-bold text-slate-500">Pending中</span>
+              </div>
+              <div className="text-3xl font-black text-orange-600">{stats.pending}</div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-purple-200 transition-all">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Layers className="w-4 h-4 text-purple-500" />
+                <span className="text-xs font-bold text-slate-500">全部專案</span>
+              </div>
+              <div className="text-3xl font-black text-purple-600">{stats.total}</div>
+            </div>
+          </div>
         </div>
 
-        <div className="w-full overflow-hidden">
-          <ProjectTable refreshKey={refreshKey} /> {/* 👈 傳入 refreshKey */}
-        </div>
-
+        {/* 核心表格 */}
+        <ProjectTable />
       </main>
 
-      <AuditSidebar />
-
-      {/* 👈 掛載新建專案彈窗 */}
       <CreateProjectModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSuccess={handleProjectCreated}
+        onSuccess={() => window.location.reload()} 
+        managerId={currentUserId}
+        managerName={currentUser}
       />
     </div>
   );

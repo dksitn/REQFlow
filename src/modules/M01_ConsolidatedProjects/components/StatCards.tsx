@@ -1,100 +1,120 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { ClipboardList, Activity, Clock, Layers, Loader2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '@/core/client/supabase';
+import { ClipboardList, Zap, Clock, Loader2 } from 'lucide-react';
 
-interface RawStatItem {
-  key: string;
-  label: string;
-  count: number;
-  icon: React.ReactNode;
-  desc: string;
+interface StatCardsProps {
+  targetUser?: string; // 用於個人戰情室過濾
 }
 
-// 🛡️ 新增 targetUser 屬性
-export default function StatCards({ refreshKey = 0, targetUser }: { refreshKey?: number, targetUser?: string }) {
-  const [rawStats, setRawStats] = useState<RawStatItem[]>([]);
+export default function StatCards({ targetUser }: StatCardsProps) {
+  const [stats, setStats] = useState({
+    evaluating: 0,
+    poc: 0,
+    pending: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchStats() {
-      setIsLoading(true);
       try {
-        let query = supabase.from('m01_projects').select('case_type');
-        
-        // 如果有傳入 targetUser，就進行過濾計算
-        if (targetUser) {
-          query = query.eq('created_by', targetUser);
-        }
-        
-        const { data, error } = await query;
+        // 🚀 撈取所有專案與負責人姓名
+        const { data, error } = await supabase
+          .from('m01_projects')
+          .select(`
+            status,
+            m01_users ( full_name )
+          `);
+
         if (error) throw error;
 
-        if (data) {
-          const evalCount = data.filter(d => d.case_type === '評估案').length;
-          const pocCount = data.filter(d => d.case_type === 'POC案').length;
-          const pendingCount = data.filter(d => d.case_type === 'Pending').length;
+        let filteredData = data || [];
 
-          setRawStats([
-            { key: 'EVAL', label: '評估案總數', count: evalCount, icon: <ClipboardList className="w-4 h-4 text-indigo-600" />, desc: '智金處專案架構評估中' },
-            { key: 'POC', label: 'POC案執行中', count: pocCount, icon: <Activity className="w-4 h-4 text-emerald-600" />, desc: '技術概念驗證與階段開發' },
-            { key: 'PEND', label: 'Pending中案件', count: pendingCount, icon: <Clock className="w-4 h-4 text-amber-600" />, desc: '等待需求單位補充文件' }
-          ]);
+        // 🛡️ 如果是個人戰情室，只統計該負責人的專案
+        if (targetUser) {
+          filteredData = filteredData.filter(
+            (p) => p.m01_users?.full_name === targetUser
+          );
         }
-      } catch (error) {
-        console.error('統計數據讀取失敗:', error);
+
+        // 📊 動態計算各狀態的加總數量
+        const evaluatingCount = filteredData.filter((p) => p.status === '評估中').length;
+        const pocCount = filteredData.filter((p) => p.status === '進行中').length;
+        const pendingCount = filteredData.filter((p) => p.status === '已結案').length; // 暫以已結案對應第三張卡片
+
+        setStats({
+          evaluating: evaluatingCount,
+          poc: pocCount,
+          pending: pendingCount,
+        });
+      } catch (error: any) {
+        // 🚀 智慧錯誤捕捉：印出真實報錯訊息
+        console.error('統計數據讀取失敗:', error.message || JSON.stringify(error));
       } finally {
         setIsLoading(false);
       }
     }
 
     fetchStats();
-  }, [refreshKey, targetUser]);
+  }, [targetUser]);
 
-  const totalCases = useMemo(() => {
-    return rawStats.reduce((sum, item) => sum + item.count, 0);
-  }, [rawStats]);
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 bg-white p-6 rounded-xl border border-indigo-100/50 shadow-sm items-center justify-center">
+        <div className="col-span-3 flex items-center justify-center gap-2 text-sm font-bold text-slate-400 py-4">
+          <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+          正在計算真實統計數據...
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4 select-none relative">
-      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-slate-400" />
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{targetUser ? '我的個人列管案源' : '智金處列管案源總計'}</span>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      
+      {/* 卡片 1：評估案 */}
+      <div className="bg-white p-6 rounded-xl border border-indigo-100/50 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all">
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-400">評估案總數</div>
+          <div className="text-3xl font-black text-slate-800 tracking-tight">
+            {stats.evaluating} <span className="text-xs font-bold text-slate-400 ml-1">件</span>
+          </div>
+          <div className="text-[11px] text-slate-400 font-medium">智金處專案架構評估中</div>
         </div>
-        <span className="text-xs font-bold bg-white text-indigo-600 px-3 py-1 rounded-full border border-indigo-100 shadow-sm font-mono flex items-center gap-2">
-          {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-          {totalCases} Active Projects
-        </span>
+        <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+          <ClipboardList className="w-5 h-5" />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {isLoading ? (
-           [1, 2, 3].map(i => (
-             <div key={i} className="bg-white border border-slate-200/70 rounded-xl p-5 shadow-sm h-[118px] animate-pulse">
-                <div className="w-24 h-4 bg-slate-200 rounded mb-4"></div>
-                <div className="w-12 h-8 bg-slate-200 rounded"></div>
-             </div>
-           ))
-        ) : (
-          rawStats.map((stat) => (
-            <div key={stat.key} className="bg-white border border-slate-200/70 rounded-xl p-5 shadow-sm shadow-slate-100/40 hover:border-slate-300/80 transition-all group">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-slate-500">{stat.label}</span>
-                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:scale-105 transition-transform">
-                  {stat.icon}
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-extrabold text-slate-900 tracking-tight font-sans">{stat.count}</span>
-                <span className="text-xs font-bold text-slate-400">件</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-2 font-medium">{stat.desc}</p>
-            </div>
-          ))
-        )}
+      {/* 卡片 2：POC 執行中 */}
+      <div className="bg-white p-6 rounded-xl border border-indigo-100/50 shadow-sm flex items-center justify-between group hover:border-emerald-200 transition-all">
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-400">POC案執行中</div>
+          <div className="text-3xl font-black text-slate-800 tracking-tight">
+            {stats.poc} <span className="text-xs font-bold text-slate-400 ml-1">件</span>
+          </div>
+          <div className="text-[11px] text-slate-400 font-medium">技術概念驗證與階段開發</div>
+        </div>
+        <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+          <Zap className="w-5 h-5" />
+        </div>
       </div>
+
+      {/* 卡片 3：Pending 案件 */}
+      <div className="bg-white p-6 rounded-xl border border-indigo-100/50 shadow-sm flex items-center justify-between group hover:border-amber-200 transition-all">
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-400">Pending中案件</div>
+          <div className="text-3xl font-black text-slate-800 tracking-tight">
+            {stats.pending} <span className="text-xs font-bold text-slate-400 ml-1">件</span>
+          </div>
+          <div className="text-[11px] text-slate-400 font-medium">等待需求單位補充文件</div>
+        </div>
+        <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-all">
+          <Clock className="w-5 h-5" />
+        </div>
+      </div>
+
     </div>
   );
 }

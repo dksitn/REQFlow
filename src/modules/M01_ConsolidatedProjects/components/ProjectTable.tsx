@@ -2,144 +2,163 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/core/client/supabase';
-import { Loader2, Search, ArrowRight, Activity, CheckCircle2, Clock } from 'lucide-react';
-import Link from 'next/link';
+import { Loader2, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { useRouter } from 'next/navigation'; // 🚀 1. 引入 Router
 
-interface ProjectTableProps {
-  targetUser?: string; // 如果有傳入，代表只要顯示該使用者的專案 (個人戰情室用)
-}
-
-export default function ProjectTable({ targetUser }: ProjectTableProps) {
+export default function ProjectTable() {
+  const router = useRouter(); // 🚀 2. 宣告 Router
   const [projects, setProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchProjects() {
       try {
-        // 🚀 核心查詢：撈取所有專案，並「關聯 (JOIN)」m01_users 表格抓出負責人真實姓名
         const { data, error } = await supabase
           .from('m01_projects')
-          .select(`
-            *,
-            m01_users ( full_name )
-          `)
+          .select(`*, m01_project_responsibles(responsible_name_snapshot)`)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // 整理資料格式，把關聯撈出來的名字扁平化
-        let formattedData = (data || []).map((p) => ({
-          ...p,
-          manager_name: p.m01_users?.full_name || '未知負責人',
-        }));
-
-        // 🛡️ 如果有傳入 targetUser (例如在「我的負責案件」頁面)，就在前端進行過濾
-        if (targetUser) {
-          formattedData = formattedData.filter((p) => p.manager_name === targetUser);
-        }
+        const formattedData = (data || []).map((p) => {
+          const ownerName = p.m01_project_responsibles?.[0]?.responsible_name_snapshot || '未指定';
+          return { ...p, owner_name: ownerName };
+        });
 
         setProjects(formattedData);
-      } catch (error) {
-        console.error('讀取真實專案失敗:', error);
+        if (formattedData.length > 0) setSelectedId(formattedData[0].id);
+      } catch (error: any) {
+        console.error('讀取專案失敗:', error.message);
       } finally {
         setIsLoading(false);
       }
     }
-
     fetchProjects();
-  }, [targetUser]);
+  }, []);
 
-  // 狀態對應的視覺標籤設計
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'P1': return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-100">P1</span>;
+      case 'P2': return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-orange-50 text-orange-600 border border-orange-100">P2</span>;
+      case 'P3': return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-50 text-blue-600 border border-blue-100">P3</span>;
+      default: return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-slate-50 text-slate-600 border border-slate-100">{priority || 'P2'}</span>;
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case '進行中':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200"><Activity className="w-3 h-3" /> {status}</span>;
-      case '已結案':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3 h-3" /> {status}</span>;
-      case '評估中':
-      default:
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200"><Clock className="w-3 h-3" /> {status}</span>;
+      case '需求單位討論': return <span className="text-blue-600 font-bold text-xs">(1)需求單位討論</span>;
+      case '需求單位送單': return <span className="text-blue-700 font-bold text-xs">(2)需求單位送單</span>;
+      case '應用科評估完成': return <span className="text-emerald-600 font-bold text-xs">(3)應用科評估完成</span>;
+      case '智金處評估完成': return <span className="text-purple-600 font-bold text-xs">(4)智金處評估完成</span>;
+      case 'POC案執行中': return <span className="text-orange-600 font-bold text-xs">(5)POC案執行中</span>;
+      case '專案處理': return <span className="text-cyan-600 font-bold text-xs">(6)專案處理</span>;
+      default: return <span className="text-slate-600 font-bold text-xs">{status}</span>;
     }
+  };
+
+  const getRiskBadge = (risk: string) => {
+    switch (risk) {
+      case '低': return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">低</span>;
+      case '中': return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-200">中</span>;
+      case '高': return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200">高</span>;
+      default: return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-50 text-slate-600 border border-slate-200">{risk || '低'}</span>;
+    }
+  };
+
+  const formatTime = (dateString: string) => {
+    if (!dateString) return '-';
+    const d = new Date(dateString);
+    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 
   if (isLoading) {
     return (
-      <div className="w-full h-64 flex flex-col items-center justify-center bg-white">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-4" />
-        <p className="text-sm font-bold text-slate-500 animate-pulse">正在載入真實專案資料...</p>
+      <div className="w-full h-64 flex flex-col items-center justify-center bg-white rounded-xl border border-slate-100 shadow-sm">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
+        <p className="text-sm font-bold text-slate-500 animate-pulse">載入專案資料中...</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white flex flex-col w-full h-full">
-      {/* 表格工具列 */}
-      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-        <div className="relative w-72">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="搜尋專案代號或名稱..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-          />
+    <div className="bg-white flex flex-col w-full rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-slate-100 bg-white">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-extrabold text-slate-800">全部專案 <span className="text-slate-400 font-medium ml-1">（共 {projects.length} 筆）</span></h2>
         </div>
-        <div className="text-xs font-bold text-slate-500">
-          共找到 <span className="text-indigo-600">{projects.length}</span> 筆專案
+        <div className="flex flex-wrap items-center gap-3">
+          <select className="text-xs font-bold text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white outline-none"><option>全部狀態</option></select>
+          <select className="text-xs font-bold text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white outline-none"><option>全部優先級</option></select>
+          <select className="text-xs font-bold text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white outline-none"><option>全部單位</option></select>
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+            <input type="text" placeholder="搜尋專案名稱或編號..." className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-slate-50 font-medium" />
+          </div>
+          <button className="ml-auto p-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50"><SlidersHorizontal className="w-4 h-4" /></button>
         </div>
       </div>
 
-      {/* 表格本體 */}
       <div className="overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse">
+        <table className="w-full text-left border-collapse whitespace-nowrap">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">專案代號</th>
-              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">專案名稱</th>
-              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">負責單位/人員</th>
-              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">當前狀態</th>
-              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider">預算 (NTD)</th>
-              <th className="px-6 py-4 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">操作</th>
+            <tr className="bg-white border-b border-slate-100">
+              <th className="px-4 py-3 text-xs font-bold text-slate-400 w-10 text-center"></th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">專案編號</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">單位</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">專案名稱</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">案件類型</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">優先級</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">狀態</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">專案負責人</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">資料完整度</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">風險</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-slate-400">最後更新</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
             {projects.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-sm font-bold text-slate-400">
-                  目前還沒有任何專案喔！趕快點擊右上角建立一筆吧！
-                </td>
-              </tr>
+              <tr><td colSpan={11} className="px-4 py-16 text-center font-bold text-slate-400 bg-slate-50/50">目前還沒有任何專案資料。</td></tr>
             ) : (
               projects.map((project) => (
-                <tr key={project.id} className="hover:bg-indigo-50/30 transition-colors group">
-                  <td className="px-6 py-4">
-                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">
-                      {project.project_code}
-                    </span>
+                <tr 
+                  key={project.id} 
+                  onClick={() => setSelectedId(project.id)}
+                  onDoubleClick={() => router.push(`/project/${project.id}`)} // 🚀 3. 綁定雙擊事件跳轉
+                  title="雙擊進入專案評估表"
+                  className={`cursor-pointer transition-colors ${selectedId === project.id ? 'bg-blue-50/40' : 'hover:bg-slate-50/80'}`}
+                >
+                  <td className="px-4 py-4 text-center">
+                    <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center mx-auto ${selectedId === project.id ? 'border-blue-600' : 'border-slate-300'}`}>
+                      {selectedId === project.id && <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>}
+                    </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-bold text-slate-800">{project.name}</div>
+                  <td className="px-4 py-4 text-slate-500 font-bold">{project.project_code}</td>
+                  <td className="px-4 py-4 text-slate-600">{project.department}</td>
+                  <td className="px-4 py-4 font-bold text-slate-800">{project.name}</td>
+                  <td className="px-4 py-4 text-slate-600">{project.project_type || '評估案'}</td>
+                  <td className="px-4 py-4">{getPriorityBadge(project.priority)}</td>
+                  <td className="px-4 py-4">{getStatusBadge(project.status_name_snapshot)}</td>
+                  <td className="px-4 py-4 text-slate-600 font-bold">{project.owner_name}</td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-2 w-28">
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${project.completion_rate || 0}%` }}></div>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-600 w-8">{project.completion_rate || 0}%</span>
+                    </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-bold text-slate-700">{project.department}</div>
-                    <div className="text-xs text-slate-400 mt-0.5">{project.manager_name}</div>
-                  </td>
-                  <td className="px-6 py-4">{getStatusBadge(project.status)}</td>
-                  <td className="px-6 py-4 text-sm font-bold text-slate-600">
-                    ${Number(project.budget).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <Link 
-                      href={`/project/${project.project_code}`}
-                      className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all"
-                    >
-                      進入評估 <ArrowRight className="w-3 h-3" />
-                    </Link>
-                  </td>
+                  <td className="px-4 py-4">{getRiskBadge(project.risk_level)}</td>
+                  <td className="px-4 py-4 text-slate-400 font-mono tracking-tight">{formatTime(project.updated_at || project.created_at)}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+      </div>
+      <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-white text-xs font-medium text-slate-500">
+        <div>顯示第 1 - {Math.min(10, projects.length)} 筆，共 {projects.length} 筆</div>
       </div>
     </div>
   );
