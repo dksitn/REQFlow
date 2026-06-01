@@ -6,14 +6,17 @@ import { supabase } from '@/core/client/supabase';
 import StatCards from '@/modules/M01_ConsolidatedProjects/components/StatCards';
 import ProjectTable from '@/modules/M01_ConsolidatedProjects/components/ProjectTable';
 import AuditSidebar from '@/modules/M01_ConsolidatedProjects/components/AuditSidebar';
-import { Loader2 } from 'lucide-react';
+import CreateProjectModal from '@/components/CreateProjectModal';
+import { Loader2, Plus } from 'lucide-react';
 
 export default function MyWorkspacePage() {
   const router = useRouter();
   
   // 儲存真實使用者的狀態
   const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null); // 🚀 記錄真實身分證號(UUID)
   const [isAuthChecking, setIsAuthChecking] = useState(true); // 身份驗證載入中狀態
+  const [isModalOpen, setIsModalOpen] = useState(false); // 🚀 控制「新增專案」Modal 開關
 
   useEffect(() => {
     async function checkUser() {
@@ -28,7 +31,7 @@ export default function MyWorkspacePage() {
           return;
         }
 
-        // 2. 🚀 拿著通行證上的 ID，去 m01_users 找真實姓名
+        // 2. 拿著通行證上的 ID，去 m01_users 找真實姓名
         const { data: profile, error: profileError } = await supabase
           .from('m01_users')
           .select('full_name')
@@ -42,6 +45,9 @@ export default function MyWorkspacePage() {
           // 成功撈到名牌！顯示真實姓名
           setCurrentUser(profile.full_name);
         }
+        
+        // 🚀 將 UUID 存入狀態，準備傳給新增專案的表單
+        setCurrentUserId(user.id);
 
       } catch (error) {
         console.error('身分驗證發生異常:', error);
@@ -69,7 +75,7 @@ export default function MyWorkspacePage() {
   // 驗證通過，正常渲染個人戰情室
   return (
     <div className="flex-1 flex min-w-0 bg-white w-full">
-      <main className="flex-1 bg-indigo-50/30 p-8 overflow-y-auto w-full min-w-0 transition-all duration-300">
+      <main className="flex-1 bg-indigo-50/30 p-8 overflow-y-auto w-full min-w-0 transition-all duration-300 relative">
         
         {/* 頂部標題區 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-indigo-100 pb-4 mb-6 gap-4">
@@ -79,6 +85,15 @@ export default function MyWorkspacePage() {
               當前身份：<span className="text-indigo-600 font-bold">{currentUser}</span>。這裡僅顯示由您負責或建立的專案。
             </p>
           </div>
+
+          {/* 🚀 觸發 Modal 的「建立新專案」按鈕 */}
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-indigo-700 hover:shadow transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            建立新專案
+          </button>
         </div>
 
         {/* 核心組件：把真實身分傳給子元件進行過濾 */}
@@ -89,6 +104,14 @@ export default function MyWorkspacePage() {
         <div className="w-full overflow-hidden border border-indigo-100/50 rounded-xl shadow-sm">
           <ProjectTable targetUser={currentUser ?? undefined} />
         </div>
+
+        {/* 🚀 隱藏在背景的 Modal 組件 */}
+        <CreateProjectModal 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+          onSuccess={() => window.location.reload()} // 寫入成功後自動重整畫面
+          managerId={currentUserId}
+        />
 
       </main>
 
