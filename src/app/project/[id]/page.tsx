@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 🚀 可重用元件 1：協作鎖文字編輯卡片
+// 🚀 元件 1：協作鎖文字編輯卡片 (修復 TypeScript Array 型別錯誤)
 // ==========================================
 function EditableCard({ title, fieldKey, projectId, initialValue, currentUserId, onSave, onConfirm, isConfirmed, placeholder, theme = 'slate' }: any) {
   const [isEditing, setIsEditing] = useState(false);
@@ -25,7 +25,13 @@ function EditableCard({ title, fieldKey, projectId, initialValue, currentUserId,
   useEffect(() => {
     const checkLock = async () => {
       const { data } = await supabase.from('m01_edit_locks').select('locked_by, m01_users(full_name)').eq('project_id', projectId).eq('field_name', fieldKey).single();
-      if (data && data.locked_by !== currentUserId) { setIsLockedByOther(true); setLockOwnerName(data.m01_users?.full_name || '其他同事'); } 
+      if (data && data.locked_by !== currentUserId) { 
+        setIsLockedByOther(true); 
+        // 🚀 TS 防呆修復：Supabase Join 預設推斷為陣列，需安全轉型與取值
+        const usersData: any = data.m01_users;
+        const ownerName = Array.isArray(usersData) ? usersData[0]?.full_name : usersData?.full_name;
+        setLockOwnerName(ownerName || '其他同事'); 
+      } 
       else { setIsLockedByOther(false); }
     };
     checkLock();
@@ -87,21 +93,27 @@ function EditableCard({ title, fieldKey, projectId, initialValue, currentUserId,
 }
 
 // ==========================================
-// 🚀 元件 2：單位選擇彈窗 (直連資料庫)
+// 🚀 元件 2：單位選擇彈窗
 // ==========================================
 const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   const [departments, setDepartments] = useState<any[]>([]);
   const [selected, setSelected] = useState(currentDept);
   const [isLoading, setIsLoading] = useState(true);
+  const [newDeptName, setNewDeptName] = useState('');
   
-  useEffect(() => {
-    const fetchDepts = async () => {
-      const { data } = await supabase.from('m01_departments').select('*').order('created_at');
-      if (data) setDepartments(data);
-      setIsLoading(false);
-    };
-    fetchDepts();
-  }, []);
+  const fetchDepts = async () => {
+    setIsLoading(true);
+    const { data } = await supabase.from('m01_departments').select('*').order('created_at');
+    if (data) setDepartments(data);
+    setIsLoading(false);
+  };
+  useEffect(() => { fetchDepts(); }, []);
+
+  const handleAddDept = async () => {
+    if(!newDeptName.trim()) return;
+    await supabase.from('m01_departments').insert({ name: newDeptName.trim() });
+    setNewDeptName(''); fetchDepts();
+  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -129,7 +141,7 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
 };
 
 // ==========================================
-// 🚀 元件 3：人員搜尋彈窗 (依科別過濾)
+// 🚀 元件 3：人員搜尋彈窗
 // ==========================================
 const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: any) => {
   const [directory, setDirectory] = useState<any[]>([]);
@@ -137,21 +149,20 @@ const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: 
   const [selectedMembers, setSelectedMembers] = useState<string[]>([...currentMembers]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchPersonnel = async () => {
-      const { data } = await supabase.from('m01_personnel').select('*').eq('role_type', deptName);
-      if (data) setDirectory(data);
-      setIsLoading(false);
-    };
-    fetchPersonnel();
-  }, [deptName]);
+  const fetchPersonnel = async () => {
+    setIsLoading(true);
+    const { data } = await supabase.from('m01_personnel').select('*').eq('role_type', deptName).order('created_at', { ascending: false });
+    if (data) setDirectory(data);
+    setIsLoading(false);
+  };
+  useEffect(() => { fetchPersonnel(); }, [deptName]);
 
   const filteredUsers = directory.filter(u => u.name.includes(searchTerm));
   const toggleMember = (name: string) => { setSelectedMembers(prev => prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name]); };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col gap-3 shrink-0">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-extrabold text-slate-800">管理 {deptName} 專案成員</h2>
@@ -163,27 +174,25 @@ const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: 
           </div>
         </div>
 
-        <div className="p-4 flex-1 overflow-y-auto bg-slate-50/50 space-y-1.5">
+        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-1.5">
           {isLoading ? <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div> :
-           filteredUsers.length === 0 ? <p className="text-center text-sm font-bold text-slate-400 py-8">該科別找不到人員，請至 Admin 新增</p> : 
+           filteredUsers.length === 0 ? <p className="text-center text-sm font-bold text-slate-400 py-8">找不到人員，請至 Admin 新增</p> : 
             filteredUsers.map(user => {
               const isSelected = selectedMembers.includes(user.name);
               return (
-                <div key={user.id} onClick={() => toggleMember(user.name)} className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                <div key={user.id} onClick={() => toggleMember(user.name)} className={`flex items-center justify-between p-2.5 border rounded-xl cursor-pointer transition-all group ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}>
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{user.name.charAt(0)}</div>
                     <div className="flex flex-col"><span className={`text-sm font-black ${isSelected ? 'text-blue-800' : 'text-slate-700'}`}>{user.name}</span><span className="text-[10px] font-bold text-slate-400">{user.role_type}</span></div>
                   </div>
-                  <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'}`}>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
-                  </div>
+                  <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'}`}>{isSelected && <Check className="w-3.5 h-3.5 text-white" />}</div>
                 </div>
               );
             })
           }
         </div>
-        <div className="px-6 py-4 bg-white border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">取消</button>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-white transition-all bg-white shadow-sm">取消</button>
           <button onClick={() => onSave(deptKey, selectedMembers)} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-[#3B82F6] rounded-lg hover:bg-blue-600 shadow-sm transition-all">確認名單 ({selectedMembers.length})</button>
         </div>
       </div>
@@ -192,7 +201,7 @@ const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: 
 };
 
 // ==========================================
-// 🚀 報表輔助元件 (Report Preview)
+// 🚀 元件 4：報表輔助元件 (Report Preview)
 // ==========================================
 const ReportMiniHeader = ({ project }: any) => (
   <div className="flex items-end justify-between border-b border-slate-800 pb-3 mb-5 shrink-0">
@@ -250,16 +259,16 @@ export default function ProjectAssessmentPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // 🚀 1. 取得登入者資訊
+        // 1. 取得登入者資訊
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           setCurrentUserId(user.id);
           setCurrentUserEmail(user.email || '');
-          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('id', user.id).maybeSingle();
+          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
           if (profile?.full_name) setCurrentUserName(profile.full_name);
         }
 
-        // 🚀 2. 取得專案資料 (改用 maybeSingle 防呆)
+        // 2. 取得專案資料
         const { data: projData, error: projError } = await supabase.from('m01_projects').select('*, m01_project_responsibles(responsible_name_snapshot)').eq('id', projectId).maybeSingle();
         if (projError) throw projError;
         if (!projData) { setIsLoading(false); return; }
@@ -379,15 +388,12 @@ export default function ProjectAssessmentPage() {
   return (
     <div className="flex-1 flex flex-col bg-[#F8FAFC] w-full h-screen overflow-y-auto relative font-sans">
       
-      {/* ==========================================
-          🚀 回歸：頂部導覽列與登入狀態 (TopBar)
-      ========================================== */}
+      {/* 🚀 頂部導覽列與登入狀態 (TopBar) */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => router.back()} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200">
             <ArrowLeft className="w-4 h-4" /> 返回列表
           </button>
-          {/* 專案代碼 Breadcrumb */}
           <div className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400">
             <span>專案管理</span> <ChevronRight className="w-3 h-3" /> <span className="text-blue-600">{project.project_code}</span>
           </div>
@@ -398,7 +404,6 @@ export default function ProjectAssessmentPage() {
             <FileText className="w-4 h-4" /> 預覽總結報告
           </button>
 
-          {/* 🚀 登入狀態顯示區塊 */}
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
             {currentUserId ? (
               <div className="flex items-center gap-3">
@@ -535,6 +540,7 @@ export default function ProjectAssessmentPage() {
             <EditableCard theme="blue" title="智金處綜合評估 (Conclusion)" fieldKey="eval_conclusion" projectId={projectId} initialValue={project.eval_conclusion} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['eval_conclusion']} placeholder="點擊開始填寫最終核定意見與建議..." />
           </div>
         </div>
+
       </div>
       
       {/* 🚀 彈窗渲染區 */}
