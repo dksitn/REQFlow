@@ -3,192 +3,264 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
+import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, SlidersHorizontal, ChevronDown, Plus, ChevronRight, AlertTriangle, LogOut, User as UserIcon } from 'lucide-react';
 
-// 🚀 這裡！已經把路徑加上 components/ 了，精準對齊我們剛重置的架構
-import ProjectTable from '@/modules/M01_ConsolidatedProjects/components/ProjectTable';
-import CreateProjectModal from '@/components/CreateProjectModal';
-import { Loader2, Plus, Folder, Clock, CheckSquare, Beaker, Hourglass, ChevronRight, AlertCircle } from 'lucide-react';
-
-export default function MyWorkspacePage() {
+export default function MyProjectsPage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [isAuthChecking, setIsAuthChecking] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [stats, setStats] = useState({ total: 0, overdue: 0, evaluating: 0, poc: 0, pending: 0 });
+  const [projects, setProjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // 🚀 真實登入狀態與使用者資訊
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+  const [currentUserName, setCurrentUserName] = useState<string>('');
 
   useEffect(() => {
-    async function checkUserAndFetchStats() {
+    async function fetchMyProjectsData() {
       try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        if (error || !user) {
-          router.push('/login');
-          return;
+        const { data: { user } } = await supabase.auth.getUser();
+        let myName = ''; 
+
+        // 🚀 自動綁定身分
+        if (user) {
+          setCurrentUserId(user.id);
+          setCurrentUserEmail(user.email || '');
+          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
+          if (profile?.full_name) {
+            myName = profile.full_name;
+            setCurrentUserName(profile.full_name);
+          }
         }
 
-        const { data: profile } = await supabase
-          .from('m01_users')
-          .select('full_name')
-          .eq('id', user.id)
-          .single();
+        const { data, error } = await supabase
+          .from('m01_projects')
+          .select(`*, m01_project_assessment_images (image_type, is_current)`)
+          .order('created_at', { ascending: false });
 
-        const fullName = profile?.full_name || user.email || '未知使用者';
-        setCurrentUser(fullName);
-        setCurrentUserId(user.id);
+        if (error) throw error;
 
-        // 撈取統計數據
-        const { data: projects } = await supabase.from('m01_projects').select('status_name_snapshot, m01_project_responsibles(user_id)');
-        
-        // 篩選出含有登入者 UUID 的專案
-        const myProjects = (projects || []).filter((p: any) => 
-          p.m01_project_responsibles?.some((r: any) => r.user_id === user.id)
-        );
-
-        setStats({
-          total: myProjects.length,
-          overdue: myProjects.filter((p: any) => p.status_name_snapshot === '需求單位討論').length, // 模擬未更新數
-          evaluating: myProjects.filter((p: any) => p.status_name_snapshot === '評估中' || p.status_name_snapshot === '需求單位送單' || p.status_name_snapshot === '應用科評估完成').length,
-          poc: myProjects.filter((p: any) => p.status_name_snapshot === 'POC案執行中' || p.status_name_snapshot === '專案處理').length,
-          pending: myProjects.filter((p: any) => p.status_name_snapshot === 'Pending中').length,
+        // 🚀 精準過濾：只顯示有包含我的名字的專案
+        const searchName = myName.replace(/\[|\]/g, ''); 
+        const myFilteredProjects = (data || []).filter(p => {
+          if (!searchName) return false; // 如果未登入或找不到名字，顯示 0 筆
+          const team = p.team_members || {};
+          const allMembers = [...(team.app || []), ...(team.planning || []), ...(team.tech || [])]
+                              .map(m => m.replace(/\[|\]/g, ''));
+          return allMembers.some(m => m.includes(searchName));
         });
 
-      } catch (error) {
-        console.error(error);
-        router.push('/login');
+        setProjects(myFilteredProjects);
+      } catch (err) {
+        console.error('讀取我的專案資料失敗:', err);
       } finally {
-        setIsAuthChecking(false);
+        setIsLoading(false);
       }
     }
-    checkUserAndFetchStats();
-  }, [router]);
+    fetchMyProjectsData();
+  }, []);
 
-  if (isAuthChecking) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-screen bg-slate-50">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-      </div>
-    );
-  }
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/auth');
+  };
+
+  const calculateCompleteness = (proj: any) => {
+    let score = 0;
+    const confirmed = proj.confirmed_fields || {};
+    const fields = ['workflow_text', 'as_is_text', 'to_be_text', 'impact_people_text', 'impact_time_text', 'impact_benefit_text', 'image_as_is', 'image_to_be', 'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'];
+    fields.forEach(f => { if (confirmed[f]) score++; });
+    return Math.round((score / 12) * 100);
+  };
+
+  const getRiskStatus = (percent: number) => {
+    if (percent > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', label: '低' };
+    if (percent >= 40) return { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', label: '中' };
+    return { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200', label: '高' };
+  };
+
+  const formatDate = (dateString: string, isShort = false) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const HH = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    if (isShort) return `${mm}/${dd} ${HH}:${min}`;
+    return `${date.getFullYear()}/${mm}/${dd} ${HH}:${min}`;
+  };
+
+  const getResponsiblesString = (proj: any) => {
+    const team = proj.team_members || {};
+    const allMembers = [...(team.app || []), ...(team.planning || []), ...(team.tech || [])];
+    return allMembers.length > 0 ? allMembers.join(', ') : '未指定';
+  };
+
+  const totalMyProjects = projects.length;
+  const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+  const staleProjectsCount = projects.filter(p => (Date.now() - new Date(p.updated_at || p.created_at).getTime()) > threeDaysInMs).length;
+  const evalCount = projects.filter(p => !p.status_name_snapshot?.toUpperCase().includes('POC')).length;
+  const pocCount = projects.filter(p => p.status_name_snapshot?.toUpperCase().includes('POC')).length;
+  const pendingCount = projects.filter(p => p.status_name_snapshot?.includes('Pending') || p.status_name_snapshot?.includes('暫停')).length;
+  const incompleteProjectsCount = projects.filter(p => calculateCompleteness(p) < 100).length;
+
+  const finalRenderedProjects = projects.filter(p => 
+    p.name.includes(searchTerm) || p.project_code.includes(searchTerm) || (p.department && p.department.includes(searchTerm))
+  );
 
   return (
-    <div className="flex-1 flex bg-slate-50/50 w-full min-h-screen">
-      {/* 左側主工作區：佔 3/4 寬度 */}
-      <main className="flex-1 p-8 overflow-y-auto min-w-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">我的負責案件</h1>
-          </div>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            New REQ
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
+      
+      {/* 🚀 統一的頂部導覽列 (TopBar) */}
+      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-black text-slate-900 tracking-tight">我的負責案件 (個人工作區)</h1>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#3B82F6] text-white text-xs font-bold rounded-lg hover:bg-blue-600 shadow-sm transition-all">
+            <Plus className="w-4 h-4" /> 建立專案
           </button>
-        </div>
 
-        {/* 頂部 5 張高標誌規格統計卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-slate-400">我的負責案件</div>
-              <div className="text-3xl font-black text-slate-800 mt-1">{stats.total}</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><Folder className="w-5 h-5" /></div>
-          </div>
-          <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-slate-400">三個工作天未更新</div>
-              <div className="text-3xl font-black text-orange-600 mt-1">{stats.overdue}</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center"><Clock className="w-5 h-5" /></div>
-          </div>
-          <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-slate-400">評估案</div>
-              <div className="text-3xl font-black text-slate-800 mt-1">{stats.evaluating}</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><CheckSquare className="w-5 h-5" /></div>
-          </div>
-          <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-slate-400">POC案</div>
-              <div className="text-3xl font-black text-slate-800 mt-1">{stats.poc}</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><Beaker className="w-5 h-5" /></div>
-          </div>
-          <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-slate-400">Pending中</div>
-              <div className="text-3xl font-black text-slate-800 mt-1">{stats.pending}</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><Hourglass className="w-5 h-5" /></div>
-          </div>
-        </div>
-
-        {/* 核心高保真數據表格 */}
-        <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden">
-          <ProjectTable targetUserId={currentUserId} />
-        </div>
-      </main>
-
-      {/* 右側資訊面板欄：佔 1/4 寬度 */}
-      <aside className="w-80 bg-white border-l border-slate-100 p-6 flex flex-col gap-6 overflow-y-auto hidden xl:flex">
-        {/* 待處理事項 */}
-        <div>
-          <h3 className="text-sm font-bold text-slate-800 mb-4">待處理事項</h3>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 hover:bg-slate-100/70 transition-all cursor-pointer">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                <Clock className="w-4 h-4 text-orange-500" /> 待更新 (超過3工作天)
+          {/* 🚀 真實登入狀態顯示區塊 */}
+          <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
+            {currentUserId ? (
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-black text-slate-800">{currentUserName || '尚未設定姓名'}</span>
+                  <span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black border border-blue-200">
+                  {currentUserName ? currentUserName.charAt(0) : <UserIcon className="w-5 h-5" />}
+                </div>
+                <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors">
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1">2 <ChevronRight className="w-3 h-3 text-slate-400" /></span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 hover:bg-slate-100/70 transition-all cursor-pointer">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                <Folder className="w-4 h-4 text-blue-500" /> 待補資料
+            ) : (
+              <button onClick={() => router.push('/auth')} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                未登入 (前往登入)
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-8 pt-8 pb-12 max-w-[1600px] mx-auto w-full flex-1 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-8 items-start">
+        <div className="flex flex-col gap-6 min-w-0">
+          
+          {/* 🚀 防呆提示框 */}
+          {!isLoading && totalMyProjects === 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 shadow-sm">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-amber-800">目前沒有匹配的案件</h3>
+                <p className="text-xs text-amber-700 mt-1">
+                  系統正在尋找專案成員包含 <strong className="bg-amber-200 px-1 rounded">{currentUserName || '您的帳號'}</strong> 的案件。
+                  如果你是剛登入，請前往「專案總覽」進入任一專案，將 <strong>{currentUserName}</strong> 加入負責人中，這裡就會自動顯示該專案！
+                </p>
               </div>
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1">3 <ChevronRight className="w-3 h-3 text-slate-400" /></span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 hover:bg-slate-100/70 transition-all cursor-pointer">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                <AlertCircle className="w-4 h-4 text-purple-500" /> 待確認狀態
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between relative overflow-hidden">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">案件總數</p><p className="text-3xl font-black text-slate-900">{totalMyProjects}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#3B82F6] flex items-center justify-center shrink-0"><Folder className="w-5 h-5" /></div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between relative overflow-hidden">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">三個工作天未更新</p><p className="text-3xl font-black text-[#F97316]">{staleProjectsCount}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F97316] flex items-center justify-center shrink-0"><Clock className="w-5 h-5" /></div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between relative overflow-hidden">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">評估案</p><p className="text-3xl font-black text-slate-900">{evalCount}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#10B981] flex items-center justify-center shrink-0"><CheckSquare className="w-5 h-5" /></div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between relative overflow-hidden">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">POC案</p><p className="text-3xl font-black text-slate-900">{pocCount}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#A855F7] flex items-center justify-center shrink-0"><FlaskConical className="w-5 h-5" /></div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between relative overflow-hidden">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">Pending中</p><p className="text-3xl font-black text-slate-900">{pendingCount}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#F59E0B] flex items-center justify-center shrink-0"><Hourglass className="w-5 h-5" /></div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col flex-1 min-h-[500px]">
+            <div className="p-6 border-b border-slate-50">
+              <div className="flex items-center gap-3 mb-5"><h2 className="text-lg font-black text-slate-800">專案清單</h2><span className="text-sm font-bold text-slate-400">(共 {finalRenderedProjects.length} 筆)</span></div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-1 overflow-x-auto pb-1 scrollbar-hide">
+                  <button className="flex items-center justify-between gap-2 px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 w-28 shrink-0">全部狀態 <ChevronDown className="w-4 h-4 text-slate-400" /></button>
+                  <button className="flex items-center justify-between gap-2 px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 w-28 shrink-0">全部優先級 <ChevronDown className="w-4 h-4 text-slate-400" /></button>
+                  <div className="relative flex-1 min-w-[200px] max-w-sm ml-2">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input type="text" placeholder="搜尋專案名稱或編號..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:font-medium" />
+                  </div>
+                </div>
+                <button className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 transition-all shrink-0"><SlidersHorizontal className="w-4 h-4" /></button>
               </div>
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1">2 <ChevronRight className="w-3 h-3 text-slate-400" /></span>
             </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse whitespace-nowrap">
+                <thead>
+                  <tr className="border-b-2 border-slate-100 bg-white">
+                    <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">專案編號</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">專案名稱</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">狀態</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">負責人</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider w-32">資料完整度</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider text-center">風險</th>
+                    <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">最後更新</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoading ? (
+                    <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400"><Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />載入中...</td></tr>
+                  ) : finalRenderedProjects.length === 0 ? (
+                    <tr><td colSpan={7} className="px-6 py-12 text-center text-sm font-bold text-slate-400">目前沒有您負責的專案</td></tr>
+                  ) : (
+                    finalRenderedProjects.map((proj) => {
+                      const completeness = calculateCompleteness(proj);
+                      const risk = getRiskStatus(completeness);
+                      
+                      return (
+                        <tr key={proj.id} onDoubleClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-blue-50/50 transition-colors cursor-pointer group">
+                          <td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-[14px] h-[14px] rounded-full border-[3px] border-[#3B82F6] flex items-center justify-center shrink-0"><div className="w-[4px] h-[4px] rounded-full bg-[#3B82F6]"></div></div><span className="text-xs font-bold text-slate-500">{proj.project_code}</span></div></td>
+                          <td className="px-4 py-4"><span className="text-sm font-black text-slate-800 group-hover:text-blue-600 transition-colors">{proj.name}</span></td>
+                          <td className="px-4 py-4"><span className="text-xs font-black text-[#3B82F6]">{proj.status_name_snapshot || '未立案'}</span></td>
+                          <td className="px-4 py-4 text-xs font-bold text-slate-700 truncate max-w-[150px]">{getResponsiblesString(proj)}</td>
+                          <td className="px-4 py-4"><div className="flex items-center gap-2 w-full"><div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex-1"><div className="h-full bg-[#3B82F6] rounded-full transition-all duration-1000 ease-out" style={{ width: `${completeness}%` }} /></div><span className="text-[10px] font-black text-slate-600 w-6">{completeness}%</span></div></td>
+                          <td className="px-4 py-4 text-center"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black border ${risk.bg} ${risk.text} ${risk.border}`}>{risk.label}</span></td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-400 font-mono tracking-tighter">{formatDate(proj.updated_at || proj.created_at, true)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-6 border-t border-slate-50 text-[11px] font-bold text-slate-400 bg-white rounded-b-2xl">顯示第 1 - {finalRenderedProjects.length} 筆，共 {finalRenderedProjects.length} 筆</div>
           </div>
         </div>
 
-        {/* 最近更新紀錄時間軸 */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-slate-800">最近更新紀錄</h3>
-            <span className="text-xs font-medium text-blue-600 hover:underline cursor-pointer">查看全部</span>
-          </div>
-          <div className="relative border-l-2 border-slate-100 pl-4 ml-2 space-y-5">
-            <div className="relative">
-              <span className="absolute -left-[21px] top-1 bg-emerald-500 w-2 h-2 rounded-full ring-4 ring-white"></span>
-              <div className="text-[11px] text-slate-400 font-bold flex justify-between"><span>REQ-2025-001</span> <span>05/24 10:35</span></div>
-              <div className="text-xs font-bold text-slate-700 mt-0.5">任文燕</div>
-              <div className="text-xs text-slate-500 bg-slate-50 p-1.5 rounded mt-1">狀態更新為「(2)需求單位送單」</div>
+        <div className="flex flex-col gap-8 w-full sticky top-8">
+          <section>
+            <h3 className="text-sm font-black text-slate-800 mb-4 px-1">我的待辦事項</h3>
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all group">
+                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600 transition-colors">待更新 <span className="text-slate-400 font-medium">(超時未動)</span></span></div>
+                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-orange-400 transition-colors" /></div>
+              </div>
+              <div className="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all group">
+                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0"><Folder className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">待補資料 <span className="text-slate-400 font-medium">(未達100%)</span></span></div>
+                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{incompleteProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 transition-colors" /></div>
+              </div>
             </div>
-            <div className="relative">
-              <span className="absolute -left-[21px] top-1 bg-blue-500 w-2 h-2 rounded-full ring-4 ring-white"></span>
-              <div className="text-[11px] text-slate-400 font-bold flex justify-between"><span>REQ-2025-005</span> <span>05/23 16:20</span></div>
-              <div className="text-xs font-bold text-slate-700 mt-0.5">李明穎</div>
-              <div className="text-xs text-slate-500 bg-slate-50 p-1.5 rounded mt-1">完成應用科評估</div>
-            </div>
-          </div>
+          </section>
         </div>
-      </aside>
-
-      <CreateProjectModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSuccess={() => window.location.reload()} 
-        managerId={currentUserId}
-        managerName={currentUser}
-      />
+      </div>
     </div>
   );
 }
