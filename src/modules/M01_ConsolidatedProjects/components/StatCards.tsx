@@ -33,9 +33,11 @@ export default function StatCards({ targetUser }: StatCardsProps) {
 
         // 🛡️ 如果是個人戰情室，只統計該負責人的專案
         if (targetUser) {
-          filteredData = filteredData.filter(
-            (p) => p.m01_users?.full_name === targetUser
-          );
+          filteredData = filteredData.filter((p: any) => {
+            const users = p.m01_users;
+            const name = Array.isArray(users) ? users[0]?.full_name : users?.full_name;
+            return name === targetUser;
+          });
         }
 
         // 📊 動態計算各狀態的加總數量
