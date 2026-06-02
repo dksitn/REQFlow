@@ -7,11 +7,11 @@ import {
   Loader2, ArrowLeft, Building2, Activity,
   LayoutGrid, FileImage, X, Check, UploadCloud, Eye, RefreshCw,
   Columns, Lock, Save, FileText, Printer, CheckCircle2,
-  ChevronDown, Plus, Edit2, Search, LogOut, User as UserIcon
+  ChevronDown, ChevronRight, Plus, Edit2, Search, LogOut, User as UserIcon
 } from 'lucide-react';
 
 // ==========================================
-// 🚀 元件 1：協作鎖文字編輯卡片 (修復 TypeScript Array 型別錯誤)
+// 🚀 元件 1：協作鎖文字編輯卡片 (EditableCard)
 // ==========================================
 function EditableCard({ title, fieldKey, projectId, initialValue, currentUserId, onSave, onConfirm, isConfirmed, placeholder, theme = 'slate' }: any) {
   const [isEditing, setIsEditing] = useState(false);
@@ -93,7 +93,7 @@ function EditableCard({ title, fieldKey, projectId, initialValue, currentUserId,
 }
 
 // ==========================================
-// 🚀 元件 2：單位選擇彈窗
+// 🚀 元件 2：單位選擇彈窗 (DepartmentSelector)
 // ==========================================
 const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   const [departments, setDepartments] = useState<any[]>([]);
@@ -103,17 +103,12 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   
   const fetchDepts = async () => {
     setIsLoading(true);
-    const { data } = await supabase.from('m01_departments').select('*').order('created_at');
+    const { data, error } = await supabase.from('m01_departments').select('*').order('created_at');
+    if (error) console.error('單位讀取失敗', error);
     if (data) setDepartments(data);
     setIsLoading(false);
   };
   useEffect(() => { fetchDepts(); }, []);
-
-  const handleAddDept = async () => {
-    if(!newDeptName.trim()) return;
-    await supabase.from('m01_departments').insert({ name: newDeptName.trim() });
-    setNewDeptName(''); fetchDepts();
-  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -123,13 +118,21 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-4 flex-1 overflow-y-auto bg-slate-50/50 space-y-2">
-          {isLoading ? <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div> : 
+          {isLoading ? (
+            <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : departments.length === 0 ? (
+            <p className="text-center text-sm font-bold text-slate-400 py-8">找不到單位，請至 Admin 新增</p>
+          ) : (
             departments.map(dept => (
-              <div key={dept.id} onClick={() => setSelected(dept.name)} className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between ${selected === dept.name ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+              <div 
+                key={dept.id} 
+                onClick={() => setSelected(dept.name)} 
+                className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between ${selected === dept.name ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+              >
                 {dept.name} {selected === dept.name && <Check className="w-4 h-4 text-blue-600" />}
               </div>
             ))
-          }
+          )}
         </div>
         <div className="px-6 py-4 bg-white border-t border-slate-100 flex gap-3 shrink-0">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">取消</button>
@@ -141,7 +144,7 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
 };
 
 // ==========================================
-// 🚀 元件 3：人員搜尋彈窗
+// 🚀 元件 3：人員搜尋彈窗 (MemberSelector)
 // ==========================================
 const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: any) => {
   const [directory, setDirectory] = useState<any[]>([]);
@@ -149,20 +152,25 @@ const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: 
   const [selectedMembers, setSelectedMembers] = useState<string[]>([...currentMembers]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchPersonnel = async () => {
-    setIsLoading(true);
-    const { data } = await supabase.from('m01_personnel').select('*').eq('role_type', deptName).order('created_at', { ascending: false });
-    if (data) setDirectory(data);
-    setIsLoading(false);
-  };
-  useEffect(() => { fetchPersonnel(); }, [deptName]);
+  useEffect(() => {
+    const fetchPersonnel = async () => {
+      const { data, error } = await supabase.from('m01_personnel').select('*').eq('role_type', deptName);
+      if (error) console.error('人員讀取失敗', error);
+      if (data) setDirectory(data);
+      setIsLoading(false);
+    };
+    fetchPersonnel();
+  }, [deptName]);
 
   const filteredUsers = directory.filter(u => u.name.includes(searchTerm));
-  const toggleMember = (name: string) => { setSelectedMembers(prev => prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name]); };
+  
+  const toggleMember = (name: string) => { 
+    setSelectedMembers(prev => prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name]); 
+  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col gap-3 shrink-0">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-extrabold text-slate-800">管理 {deptName} 專案成員</h2>
@@ -170,29 +178,44 @@ const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: 
           </div>
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" placeholder="搜尋姓名..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+            <input 
+              type="text" placeholder="搜尋姓名..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus 
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" 
+            />
           </div>
         </div>
 
-        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-1.5">
-          {isLoading ? <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div> :
-           filteredUsers.length === 0 ? <p className="text-center text-sm font-bold text-slate-400 py-8">找不到人員，請至 Admin 新增</p> : 
+        <div className="p-4 flex-1 overflow-y-auto bg-slate-50/50 space-y-1.5">
+          {isLoading ? (
+            <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : filteredUsers.length === 0 ? (
+            <p className="text-center text-sm font-bold text-slate-400 py-8">該科別找不到人員，請至 Admin 新增</p>
+          ) : (
             filteredUsers.map(user => {
               const isSelected = selectedMembers.includes(user.name);
               return (
-                <div key={user.id} onClick={() => toggleMember(user.name)} className={`flex items-center justify-between p-2.5 border rounded-xl cursor-pointer transition-all group ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}>
+                <div 
+                  key={user.id} 
+                  onClick={() => toggleMember(user.name)} 
+                  className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}
+                >
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{user.name.charAt(0)}</div>
-                    <div className="flex flex-col"><span className={`text-sm font-black ${isSelected ? 'text-blue-800' : 'text-slate-700'}`}>{user.name}</span><span className="text-[10px] font-bold text-slate-400">{user.role_type}</span></div>
+                    <div className="flex flex-col">
+                      <span className={`text-sm font-black ${isSelected ? 'text-blue-800' : 'text-slate-700'}`}>{user.name}</span>
+                      <span className="text-[10px] font-bold text-slate-400">{user.role_type}</span>
+                    </div>
                   </div>
-                  <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'}`}>{isSelected && <Check className="w-3.5 h-3.5 text-white" />}</div>
+                  <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'}`}>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
                 </div>
               );
             })
-          }
+          )}
         </div>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-white transition-all bg-white shadow-sm">取消</button>
+        <div className="px-6 py-4 bg-white border-t border-slate-100 flex gap-3 shrink-0">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">取消</button>
           <button onClick={() => onSave(deptKey, selectedMembers)} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-[#3B82F6] rounded-lg hover:bg-blue-600 shadow-sm transition-all">確認名單 ({selectedMembers.length})</button>
         </div>
       </div>
@@ -205,8 +228,14 @@ const MemberSelector = ({ deptKey, deptName, currentMembers, onSave, onClose }: 
 // ==========================================
 const ReportMiniHeader = ({ project }: any) => (
   <div className="flex items-end justify-between border-b border-slate-800 pb-3 mb-5 shrink-0">
-    <div className="flex items-baseline gap-4"><h1 className="text-2xl font-black text-slate-900">{project?.name}</h1><span className="text-sm font-bold text-slate-500">{project?.project_code}</span></div>
-    <div className="flex gap-4 text-[11px] font-bold text-slate-600"><span>單位：{project?.department}</span><span>狀態：{project?.status_name_snapshot}</span></div>
+    <div className="flex items-baseline gap-4">
+      <h1 className="text-2xl font-black text-slate-900">{project?.name}</h1>
+      <span className="text-sm font-bold text-slate-500">{project?.project_code}</span>
+    </div>
+    <div className="flex gap-4 text-[11px] font-bold text-slate-600">
+      <span>單位：{project?.department}</span>
+      <span>狀態：{project?.status_name_snapshot}</span>
+    </div>
   </div>
 );
 
@@ -218,7 +247,7 @@ const ReportTextCard = ({ title, content }: any) => (
 );
 
 // ==========================================
-// 🚀 主頁面
+// 🚀 主頁面 (ProjectAssessmentPage)
 // ==========================================
 export default function ProjectAssessmentPage() {
   const params = useParams();
@@ -226,15 +255,12 @@ export default function ProjectAssessmentPage() {
   const projectId = params.id as string;
 
   const [project, setProject] = useState<any>(null);
-  
-  // 🚀 登入狀態與使用者資訊
   const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
-  const [currentUserName, setCurrentUserName] = useState<string>('');
-
   const [isLoading, setIsLoading] = useState(true);
 
-  // 狀態彈窗
+  // ----------------------------------------
+  // 彈窗與狀態
+  // ----------------------------------------
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
   const [memberModalConfig, setMemberModalConfig] = useState<{ isOpen: boolean, deptKey: string, deptName: string } | null>(null);
@@ -251,27 +277,31 @@ export default function ProjectAssessmentPage() {
   const [isUploading, setIsUploading] = useState<{ AS_IS: boolean; TO_BE: boolean }>({ AS_IS: false, TO_BE: false });
   const asIsInputRef = useRef<HTMLInputElement>(null);
   const toBeInputRef = useRef<HTMLInputElement>(null);
-  
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [viewerMode, setViewerMode] = useState<'SINGLE_AS_IS' | 'SINGLE_TO_BE' | 'DUAL'>('DUAL');
   const [isReportOpen, setIsReportOpen] = useState(false);
 
+  // ----------------------------------------
+  // 🚀 防禦性資料讀取
+  // ----------------------------------------
   useEffect(() => {
     async function fetchData() {
       try {
-        // 1. 取得登入者資訊
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setCurrentUserId(user.id);
-          setCurrentUserEmail(user.email || '');
-          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
-          if (profile?.full_name) setCurrentUserName(profile.full_name);
-        }
+        if (user) setCurrentUserId(user.id);
 
-        // 2. 取得專案資料
-        const { data: projData, error: projError } = await supabase.from('m01_projects').select('*, m01_project_responsibles(responsible_name_snapshot)').eq('id', projectId).maybeSingle();
+        const { data: projData, error: projError } = await supabase
+          .from('m01_projects')
+          .select('*, m01_project_responsibles(responsible_name_snapshot)')
+          .eq('id', projectId)
+          .maybeSingle(); 
+          
         if (projError) throw projError;
-        if (!projData) { setIsLoading(false); return; }
+        if (!projData) {
+          console.warn('找不到此專案資料');
+          setIsLoading(false);
+          return;
+        }
 
         if (!projData.team_members) projData.team_members = { app: [], planning: [], tech: [] };
         
@@ -282,22 +312,26 @@ export default function ProjectAssessmentPage() {
         const { data: statuses } = await supabase.from('m01_project_status_options').select('*').eq('is_active', true).order('display_order');
         if (statuses) setStatusOptions(statuses);
 
-        const { data: imgData } = await supabase.from('m01_project_assessment_images').select('*').eq('project_id', projectId).eq('is_current', true);
+        const { data: imgData, error: imgError } = await supabase.from('m01_project_assessment_images').select('*').eq('project_id', projectId).eq('is_current', true);
+        if (imgError) console.error('圖片讀取錯誤', imgError);
+        
         if (imgData && imgData.length > 0) {
-          setImages({ AS_IS: imgData.find(img => img.image_type === 'AS_IS') || null, TO_BE: imgData.find(img => img.image_type === 'TO_BE') || null });
+          setImages({ 
+            AS_IS: imgData.find(img => img.image_type === 'AS_IS') || null, 
+            TO_BE: imgData.find(img => img.image_type === 'TO_BE') || null 
+          });
         } else {
           setImages({ AS_IS: null, TO_BE: null });
         }
-      } catch (error) { console.error('讀取失敗:', error); } finally { setIsLoading(false); }
+
+      } catch (error) { 
+        console.error('讀取失敗:', error); 
+      } finally { 
+        setIsLoading(false); 
+      }
     }
     if (projectId) fetchData();
   }, [projectId]);
-
-  // 🚀 登出邏輯
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/auth');
-  };
 
   const handleConfirmField = async (fieldKey: string) => {
     const updatedConfirmed = { ...(project.confirmed_fields || {}), [fieldKey]: true };
@@ -376,7 +410,7 @@ export default function ProjectAssessmentPage() {
   const openViewer = (mode: 'SINGLE_AS_IS' | 'SINGLE_TO_BE' | 'DUAL') => { setViewerMode(mode); setIsViewerOpen(true); };
 
   if (isLoading) return <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-[#F8FAFC]"><Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" /></div>;
-  if (!project) return <div className="p-8 font-bold text-slate-600">找不到此專案</div>;
+  if (!project) return <div className="p-8 font-bold text-slate-600">找不到此專案 (可能 ID 錯誤或無權限存取)</div>;
 
   const confirmedFields = project.confirmed_fields || {};
   const teamConfig = [
@@ -387,47 +421,12 @@ export default function ProjectAssessmentPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-[#F8FAFC] w-full h-screen overflow-y-auto relative font-sans">
-      
-      {/* 🚀 頂部導覽列與登入狀態 (TopBar) */}
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200">
-            <ArrowLeft className="w-4 h-4" /> 返回列表
-          </button>
-          <div className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400">
-            <span>專案管理</span> <ChevronRight className="w-3 h-3" /> <span className="text-blue-600">{project.project_code}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsReportOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-700 transition-all shadow-sm">
-            <FileText className="w-4 h-4" /> 預覽總結報告
-          </button>
-
-          <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-            {currentUserId ? (
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col items-end">
-                  <span className="text-xs font-black text-slate-800">{currentUserName || '已登入使用者'}</span>
-                  <span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span>
-                </div>
-                <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black border border-blue-200">
-                  {currentUserName ? currentUserName.charAt(0) : <UserIcon className="w-5 h-5" />}
-                </div>
-                <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors">
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <button onClick={() => router.push('/auth')} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
-                未登入 (前往登入)
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="px-8 py-6 max-w-[1400px] mx-auto w-full flex items-center justify-between">
+        <button onClick={() => router.back()} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors"><ArrowLeft className="w-4 h-4" /> 返回列表</button>
+        <button onClick={() => setIsReportOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-700 transition-all shadow-sm"><FileText className="w-4 h-4" /> 預覽總結報告</button>
       </div>
 
-      <div className="px-8 pt-8 pb-24 max-w-[1400px] mx-auto w-full flex flex-col gap-6">
+      <div className="px-8 pb-24 max-w-[1400px] mx-auto w-full flex flex-col gap-6">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">個別專案綜合評估</h1>
           <div className="flex items-center gap-2"><span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded text-xs font-black border border-emerald-100">評估中</span><span className="px-3 py-1 bg-[#F97316] text-white rounded text-xs font-black shadow-sm">P1</span></div>
@@ -540,7 +539,6 @@ export default function ProjectAssessmentPage() {
             <EditableCard theme="blue" title="智金處綜合評估 (Conclusion)" fieldKey="eval_conclusion" projectId={projectId} initialValue={project.eval_conclusion} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['eval_conclusion']} placeholder="點擊開始填寫最終核定意見與建議..." />
           </div>
         </div>
-
       </div>
       
       {/* 🚀 彈窗渲染區 */}
