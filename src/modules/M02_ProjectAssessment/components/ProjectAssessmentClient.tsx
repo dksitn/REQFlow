@@ -8,7 +8,7 @@ import { supabase } from '@/core/client/supabase';
 import {
   Loader2, ArrowLeft, Building2, Eye, X, Check, UploadCloud, RefreshCw,
   Columns, Lock, Save, FileText, Printer, CheckCircle2, Unlock,
-  ChevronDown, Plus, Edit2, Search, LogOut, User as UserIcon
+  ChevronDown, Plus, Edit2, Search, LogOut, User as UserIcon, FileImage
 } from 'lucide-react';
 
 // ==========================================
