@@ -1,18 +1,25 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* 🛡️ 核心防禦線：強制命令 Tailwind CSS v4 編譯器深度掃描解耦架構特區 */
-@source "../core";
-@source "../modules";
-
-@layer base {
-  :root {
-    --background: #ffffff;
-    --foreground: #0f172a;
-  }
+/* ==========================================
+   🚀 客製化右側下拉滑桿 (Mac OS Style Scrollbar)
+   ========================================== */
+::-webkit-scrollbar {
+  width: 8px;  /* 垂直滑桿的寬度 */
+  height: 8px; /* 水平滑桿的高度 */
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+::-webkit-scrollbar-track {
+  background: transparent; /* 滑桿軌道背景透明，保持畫面乾淨 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* 預設滑桿顏色 (Slate-300) */
+  border-radius: 10px; /* 圓角設計 */
+  border: 2px solid #F8FAFC; /* 加上與背景同色的邊框，製造懸浮感 */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* 滑鼠移過去時加深顏色 (Slate-400) */
 }
