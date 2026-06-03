@@ -38,18 +38,22 @@ function EditableCard({
         .maybeSingle();
 
       if (data) {
+        // 🕒 檢查鎖定是否超過 30 分鐘 (30 * 60 * 1000 ms)
         const lockedTime = new Date(data.locked_at).getTime();
         const now = Date.now();
         
         if (now - lockedTime > 30 * 60 * 1000) {
+          // 超過 30 分鐘：自動解除鎖定
           await supabase.from('m01_edit_locks').delete().eq('project_id', projectId).eq('field_name', fieldKey);
           setIsLockedByOther(false);
         } else if (data.locked_by !== currentUserId) {
+          // 未超時且是別人的鎖
           setIsLockedByOther(true); 
           const usersData: any = data.m01_users;
           const ownerName = Array.isArray(usersData) ? usersData[0]?.full_name : usersData?.full_name;
           setLockOwnerName(ownerName || '其他同事'); 
         } else {
+          // 是自己的鎖
           setIsLockedByOther(false); 
         }
       } else {
@@ -67,6 +71,7 @@ function EditableCard({
     try {
       if (!currentUserId) { setIsEditing(true); return; }
 
+      // 雙重檢查：避免兩個人同時按編輯
       const { data: existingLock } = await supabase.from('m01_edit_locks').select('locked_by, locked_at').eq('project_id', projectId).eq('field_name', fieldKey).maybeSingle();
       if (existingLock) {
         const isExpired = (Date.now() - new Date(existingLock.locked_at).getTime()) > 30 * 60 * 1000;
@@ -196,7 +201,7 @@ function EditableCard({
 }
 
 // ==========================================
-// 🚀 元件 2：單位選擇彈窗 (加強錯誤提示與 Loading 版)
+// 🚀 元件 2：單位選擇彈窗 (加強容錯與錯誤顯示版)
 // ==========================================
 const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   const [departments, setDepartments] = useState<any[]>([]);
@@ -204,16 +209,29 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [newDeptName, setNewDeptName] = useState('');
+  const [fetchError, setFetchError] = useState<string | null>(null);
   
   const fetchDepts = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase.from('core_units').select('*').order('created_at');
-    if (error) {
-      console.error('讀取單位失敗:', error);
-    } else if (data) {
-      setDepartments(data);
+    setFetchError(null);
+    try {
+      const { data, error } = await supabase.from('core_units').select('*').order('created_at');
+      if (error) {
+        console.error('讀取單位失敗:', error);
+        setFetchError(error.message);
+        setDepartments([]);
+      } else if (data) {
+        setDepartments(data);
+      } else {
+         setDepartments([]);
+      }
+    } catch (err: any) {
+        console.error('執行 fetchDepts 時發生例外錯誤:', err);
+        setFetchError(err.message || '未知錯誤');
+        setDepartments([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
   
   useEffect(() => { fetchDepts(); }, []);
@@ -264,6 +282,8 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
         <div className="p-4 flex-1 overflow-y-auto bg-white space-y-2">
           {isLoading ? (
             <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : fetchError ? (
+            <div className="text-center py-6 text-xs font-bold text-rose-500">讀取失敗: {fetchError}</div>
           ) : departments.length === 0 ? (
             <div className="text-center py-6 text-xs font-bold text-slate-400">目前無單位，請在上方新增</div>
           ) : (
