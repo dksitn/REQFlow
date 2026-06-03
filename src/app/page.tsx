@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, Plus, LogOut, User as UserIcon } from 'lucide-react';
+import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, SlidersHorizontal, ChevronDown, Plus, LogOut, User as UserIcon } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -13,7 +13,6 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 🚀 新增狀態：用於控制卡片篩選 (預設為 ALL)
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'EVAL' | 'POC' | 'PENDING'>('ALL');
 
   const [currentUserId, setCurrentUserId] = useState<string>('');
@@ -89,13 +88,11 @@ export default function DashboardPage() {
   const pendingCount = projects.filter(p => pendingStatuses.includes(p.status_name_snapshot)).length;
   const totalCount = evalCount + pocCount + pendingCount;
 
-  // 🚀 核心過濾器：依照 activeFilter 過濾專案
   let baseFilteredProjects = projects;
   if (activeFilter === 'EVAL') baseFilteredProjects = projects.filter(p => evalStatuses.includes(p.status_name_snapshot));
   else if (activeFilter === 'POC') baseFilteredProjects = projects.filter(p => pocStatuses.includes(p.status_name_snapshot));
   else if (activeFilter === 'PENDING') baseFilteredProjects = projects.filter(p => pendingStatuses.includes(p.status_name_snapshot));
 
-  // 加上文字搜尋過濾
   const finalFilteredProjects = baseFilteredProjects.filter(p => {
     const s = searchTerm.toLowerCase();
     return (p.name?.toLowerCase().includes(s) || p.project_code?.toLowerCase().includes(s) || p.department?.toLowerCase().includes(s) || getResponsiblesString(p).toLowerCase().includes(s));
@@ -121,7 +118,6 @@ export default function DashboardPage() {
 
       <div className="px-8 pt-8 pb-12 max-w-[1600px] mx-auto w-full flex-1">
         
-        {/* 🚀 點擊卡片觸發篩選 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 cursor-pointer select-none">
           <div onClick={() => setActiveFilter('ALL')} className={`bg-white rounded-2xl p-5 shadow-sm flex items-start justify-between transition-all ${activeFilter === 'ALL' ? 'ring-2 ring-blue-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-blue-200'}`}>
             <div><p className="text-[11px] font-bold text-slate-400 mb-1">專案總數</p><p className="text-3xl font-black text-slate-900">{totalCount}</p></div>
@@ -141,8 +137,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-[500px]">
-          <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden" style={{ maxHeight: 'calc(100vh - 250px)' }}>
+          <div className="p-6 border-b border-slate-50 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-black text-slate-800">{activeFilter === 'ALL' ? '全部專案' : activeFilter === 'EVAL' ? '評估案' : activeFilter === 'POC' ? 'POC案' : '暫緩案'}</h2>
               <span className="text-sm font-bold text-slate-400">(共 {finalFilteredProjects.length} 筆)</span>
@@ -150,9 +146,9 @@ export default function DashboardPage() {
             <div className="relative w-64"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" placeholder="搜尋名稱、編號..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500" /></div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-auto flex-1 custom-scrollbar">
             <table className="w-full text-left border-collapse whitespace-nowrap">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b-2 border-slate-100 bg-white">
                   <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">編號</th>
                   <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">單位</th>
