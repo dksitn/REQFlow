@@ -201,7 +201,7 @@ function EditableCard({
 }
 
 // ==========================================
-// 🚀 元件 2：單位選擇彈窗 (加強容錯與錯誤顯示版)
+// 🚀 元件 2：單位選擇彈窗 (直覺選取 + 新增功能)
 // ==========================================
 const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   const [departments, setDepartments] = useState<any[]>([]);
@@ -215,18 +215,26 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
     setIsLoading(true);
     setFetchError(null);
     try {
+      // 請求 core_units 資料
       const { data, error } = await supabase.from('core_units').select('*').order('created_at');
+      
       if (error) {
         console.error('讀取單位失敗:', error);
         setFetchError(error.message);
         setDepartments([]);
-      } else if (data) {
+      } else if (data && data.length > 0) {
         setDepartments(data);
       } else {
-         setDepartments([]);
+        // 如果資料庫是空的，給予預設選項，避免畫面空白
+        const defaultDepts = [
+          { id: '1', name: '智能金融處' },
+          { id: '2', name: '資訊處' },
+          { id: '3', name: '消金處' }
+        ];
+        setDepartments(defaultDepts);
       }
     } catch (err: any) {
-        console.error('執行 fetchDepts 時發生例外錯誤:', err);
+        console.error('執行 fetchDepts 發生例外:', err);
         setFetchError(err.message || '未知錯誤');
         setDepartments([]);
     } finally {
@@ -240,12 +248,16 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
     if(!newDeptName.trim()) return;
     setIsAdding(true);
     try {
+      // 嘗試寫入新單位
       const { error } = await supabase.from('core_units').insert({ name: newDeptName.trim() });
       if (error) {
-        alert(`❌ 新增失敗：\n${error.message}\n(可能是單位名稱重複，或是資料庫 core_units 權限未開放)`);
+        alert(`❌ 新增失敗：\n${error.message}\n(請確認剛剛的 SQL 快取重載指令是否成功執行)`);
         throw error;
       }
+      // 寫入成功後，清空輸入框，自動選中該單位，並重新抓取列表
+      const addedName = newDeptName.trim();
       setNewDeptName(''); 
+      setSelected(addedName);
       await fetchDepts(); 
     } catch (error) {
       console.error('新增單位錯誤:', error);
@@ -256,52 +268,81 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[80vh]">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
+        
+        {/* 標頭 */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/50">
           <h2 className="text-base font-extrabold text-slate-800">選擇所屬單位</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
         </div>
-        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex gap-2">
-          <input 
-            type="text" 
-            placeholder="新增單位 (按 Enter 送出)..." 
-            value={newDeptName} 
-            onChange={(e)=>setNewDeptName(e.target.value)} 
-            onKeyDown={(e) => e.key === 'Enter' && handleAddDept()}
-            disabled={isAdding}
-            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400 disabled:opacity-50" 
-          />
-          <button 
-            onClick={handleAddDept} 
-            disabled={isAdding || !newDeptName.trim()}
-            className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center justify-center disabled:opacity-50 min-w-[36px]"
-          >
-            {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4"/>}
-          </button>
-        </div>
-        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-2">
+
+        {/* 列表區塊 (讓你直接用選的) */}
+        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-2 custom-scrollbar">
+          <div className="text-[10px] font-bold text-slate-400 mb-2 px-1">點擊選擇現有單位：</div>
           {isLoading ? (
             <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
           ) : fetchError ? (
-            <div className="text-center py-6 text-xs font-bold text-rose-500">讀取失敗: {fetchError}</div>
+            <div className="text-center py-6 text-xs font-bold text-rose-500 bg-rose-50 rounded-lg p-3">
+              讀取失敗: {fetchError}<br/>
+              <span className="text-[10px] mt-1 block">請執行 SQL 快取重載指令。</span>
+            </div>
           ) : departments.length === 0 ? (
-            <div className="text-center py-6 text-xs font-bold text-slate-400">目前無單位，請在上方新增</div>
+            <div className="text-center py-6 text-xs font-bold text-slate-400 bg-slate-50 rounded-lg">目前無單位，請在下方新增</div>
           ) : (
             departments.map(dept => (
               <div 
                 key={dept.id} 
                 onClick={() => setSelected(dept.name)} 
-                className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between ${selected === dept.name ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between group ${
+                  selected === dept.name 
+                  ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' 
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-slate-50'
+                }`}
               >
-                {dept.name} {selected === dept.name && <Check className="w-4 h-4 text-blue-600" />}
+                {dept.name} 
+                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${selected === dept.name ? 'bg-blue-600 border-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
+                  {selected === dept.name && <Check className="w-3 h-3 text-white" />}
+                </div>
               </div>
             ))
           )}
         </div>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border bg-white rounded-lg shadow-sm hover:bg-slate-50">取消</button>
-          <button onClick={() => onSave(selected)} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-700">確認</button>
+
+        {/* 新增單位輸入區塊 */}
+        <div className="px-4 py-4 bg-slate-50 border-t border-b border-slate-100 flex flex-col gap-2 shrink-0">
+          <div className="text-[10px] font-bold text-slate-400 px-1">如果列表中沒有，請在此新增：</div>
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              placeholder="輸入新單位名稱..." 
+              value={newDeptName} 
+              onChange={(e)=>setNewDeptName(e.target.value)} 
+              onKeyDown={(e) => e.key === 'Enter' && handleAddDept()}
+              disabled={isAdding}
+              className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 transition-all font-medium" 
+            />
+            <button 
+              onClick={handleAddDept} 
+              disabled={isAdding || !newDeptName.trim()}
+              className="bg-slate-800 text-white hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center disabled:opacity-50 min-w-[70px] shadow-sm transition-colors"
+            >
+              {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : '新增'}
+            </button>
+          </div>
         </div>
+
+        {/* 底部按鈕 */}
+        <div className="px-6 py-4 bg-white flex gap-3 shrink-0">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 bg-white rounded-xl shadow-sm hover:bg-slate-50 transition-colors">取消</button>
+          <button 
+            onClick={() => onSave(selected)} 
+            disabled={!selected}
+            className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            確認選取
+          </button>
+        </div>
+
       </div>
     </div>
   );
