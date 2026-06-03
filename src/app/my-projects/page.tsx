@@ -25,28 +25,20 @@ export default function MyProjectsPage() {
         let myEmail = '';
         let myName = ''; 
 
-        // 🚀 1. 寫死的強綁定字典 (Hardcoded Email to Name Map)
-        const emailToNameMap: Record<string, string> = {
-          'jassie45214@gmail.com': '沈x翼',
-          'dksitn@gmail.com': '任x燕'
-        };
-
         if (user) {
           myEmail = user.email || '';
           setCurrentUserId(user.id);
           setCurrentUserEmail(myEmail);
           
-          // 優先使用我們寫死的字典，如果不在字典內，再去資料庫撈
-          if (emailToNameMap[myEmail]) {
-            myName = emailToNameMap[myEmail];
-          } else {
-            const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', myEmail).maybeSingle();
-            if (profile?.full_name) myName = profile.full_name;
+          // 🚀 解除 Hardcode！直接從資料庫 m01_users 查詢綁定的姓名
+          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', myEmail).maybeSingle();
+          if (profile?.full_name) {
+            myName = profile.full_name;
+            setCurrentUserName(myName);
           }
-          setCurrentUserName(myName);
         }
 
-        // 🚀 2. 取得所有專案
+        // 取得所有專案
         const { data, error } = await supabase
           .from('m01_projects')
           .select(`*, m01_project_assessment_images (image_type, is_current)`)
@@ -54,17 +46,16 @@ export default function MyProjectsPage() {
 
         if (error) throw error;
 
-        // 🚀 3. 強力過濾邏輯：只要專案負責人 JSON 裡面有包含我的名字，就撈出來
-        const searchName = myName.replace(/\[|\]/g, ''); // 移除可能的括號防呆
+        // 🚀 強力過濾邏輯：精準比對去除空白與括號後的名字
+        const searchName = myName.replace(/\[|\]/g, '').trim(); 
         
         const myFilteredProjects = (data || []).filter(p => {
-          if (!searchName) return false; // 沒名字直接不顯示
+          if (!searchName) return false; 
           
           const team = p.team_members || {};
           const allMembers = [...(team.app || []), ...(team.planning || []), ...(team.tech || [])]
-                              .map(m => m.replace(/\[|\]/g, ''));
+                              .map(m => m.replace(/\[|\]/g, '').trim());
                               
-          // 只要有任何一個成員的名字包含 (includes) 我的名字，就符合！
           return allMembers.some(m => m.includes(searchName) || searchName.includes(m));
         });
 
@@ -128,8 +119,6 @@ export default function MyProjectsPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
-      
-      {/* 🚀 統一的頂部導覽列 (TopBar) */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-black text-slate-900 tracking-tight">我的負責案件 (個人工作區)</h1>
@@ -140,12 +129,11 @@ export default function MyProjectsPage() {
             <Plus className="w-4 h-4" /> 建立專案
           </button>
 
-          {/* 🚀 登入狀態顯示區塊 */}
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
             {currentUserId ? (
               <div className="flex items-center gap-3">
                 <div className="flex flex-col items-end">
-                  <span className="text-xs font-black text-slate-800">{currentUserName || '尚未設定姓名'}</span>
+                  <span className="text-xs font-black text-slate-800">{currentUserName || '無資料庫綁定'}</span>
                   <span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span>
                 </div>
                 <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black border border-blue-200">
@@ -167,15 +155,14 @@ export default function MyProjectsPage() {
       <div className="px-8 pt-8 pb-12 max-w-[1600px] mx-auto w-full flex-1 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-8 items-start">
         <div className="flex flex-col gap-6 min-w-0">
           
-          {/* 🚀 防呆提示框 */}
           {!isLoading && totalMyProjects === 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 shadow-sm">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <div>
                 <h3 className="text-sm font-bold text-amber-800">目前沒有匹配的案件</h3>
                 <p className="text-xs text-amber-700 mt-1">
-                  系統正在尋找專案成員包含 <strong className="bg-amber-200 px-1 rounded">{currentUserName || '您的帳號'}</strong> 的案件。
-                  如果你是剛登入，請前往「專案總覽」進入任一專案，將 <strong>{currentUserName}</strong> 加入負責人中，這裡就會自動顯示該專案！
+                  系統正在尋找專案負責人包含 <strong className="bg-amber-200 px-1 rounded">{currentUserName || '尚未由 Admin 綁定姓名'}</strong> 的案件。
+                  若為空，請確認 Admin 後台的「系統權限綁定」是否正確設定，或是進入專案將自己加入負責人。
                 </p>
               </div>
             </div>
