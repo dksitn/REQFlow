@@ -199,73 +199,8 @@ function EditableCard({
       )}
     </div>
   );
-}
-
-// ==========================================
-// 🚀 元件 2：單位選擇彈窗 (接 core_units)
-// ==========================================
-const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
-  const [departments, setDepartments] = useState<any[]>([]);
-  const [selected, setSelected] = useState(currentDept);
-  const [isLoading, setIsLoading] = useState(true);
-  const [newDeptName, setNewDeptName] = useState('');
-  
-  const fetchDepts = async () => {
-    setIsLoading(true);
-    const { data } = await supabase.from('core_units').select('*').order('created_at');
-    if (data) setDepartments(data);
-    setIsLoading(false);
-  };
-  
-  useEffect(() => { fetchDepts(); }, []);
-
-  const handleAddDept = async () => {
-    if(!newDeptName.trim()) return;
-    await supabase.from('core_units').insert({ name: newDeptName.trim() });
-    setNewDeptName(''); 
-    fetchDepts();
-  };
-
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[80vh]">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h2 className="text-base font-extrabold text-slate-800">選擇所屬單位</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex gap-2">
-          <input 
-            type="text" 
-            placeholder="新增單位..." 
-            value={newDeptName} 
-            onChange={(e)=>setNewDeptName(e.target.value)} 
-            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400" 
-          />
-          <button onClick={handleAddDept} className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold"><Plus className="w-4 h-4"/></button>
-        </div>
-        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-2">
-          {isLoading ? (
-            <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
-          ) : (
-            departments.map(dept => (
-              <div 
-                key={dept.id} 
-                onClick={() => setSelected(dept.name)} 
-                className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between ${selected === dept.name ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-              >
-                {dept.name} {selected === dept.name && <Check className="w-4 h-4 text-blue-600" />}
-              </div>
-            ))
-          )}
-        </div>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border bg-white rounded-lg shadow-sm hover:bg-slate-50">取消</button>
-          <button onClick={() => onSave(selected)} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-700">確認</button>
-        </div>
-      </div>
-    </div>
-  );
 };
+
 
 // ==========================================
 // 🚀 主頁面
