@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
@@ -20,19 +22,31 @@ export default function MyProjectsPage() {
     async function fetchMyProjectsData() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        let myEmail = '';
         let myName = ''; 
 
-        // 🚀 自動綁定身分
+        // 🚀 1. 寫死的強綁定字典 (Hardcoded Email to Name Map)
+        const emailToNameMap: Record<string, string> = {
+          'jassie45214@gmail.com': '沈x翼',
+          'dksitn@gmail.com': '任x燕'
+        };
+
         if (user) {
+          myEmail = user.email || '';
           setCurrentUserId(user.id);
-          setCurrentUserEmail(user.email || '');
-          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
-          if (profile?.full_name) {
-            myName = profile.full_name;
-            setCurrentUserName(profile.full_name);
+          setCurrentUserEmail(myEmail);
+          
+          // 優先使用我們寫死的字典，如果不在字典內，再去資料庫撈
+          if (emailToNameMap[myEmail]) {
+            myName = emailToNameMap[myEmail];
+          } else {
+            const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', myEmail).maybeSingle();
+            if (profile?.full_name) myName = profile.full_name;
           }
+          setCurrentUserName(myName);
         }
 
+        // 🚀 2. 取得所有專案
         const { data, error } = await supabase
           .from('m01_projects')
           .select(`*, m01_project_assessment_images (image_type, is_current)`)
@@ -40,14 +54,18 @@ export default function MyProjectsPage() {
 
         if (error) throw error;
 
-        // 🚀 精準過濾：只顯示有包含我的名字的專案
-        const searchName = myName.replace(/\[|\]/g, ''); 
+        // 🚀 3. 強力過濾邏輯：只要專案負責人 JSON 裡面有包含我的名字，就撈出來
+        const searchName = myName.replace(/\[|\]/g, ''); // 移除可能的括號防呆
+        
         const myFilteredProjects = (data || []).filter(p => {
-          if (!searchName) return false; // 如果未登入或找不到名字，顯示 0 筆
+          if (!searchName) return false; // 沒名字直接不顯示
+          
           const team = p.team_members || {};
           const allMembers = [...(team.app || []), ...(team.planning || []), ...(team.tech || [])]
                               .map(m => m.replace(/\[|\]/g, ''));
-          return allMembers.some(m => m.includes(searchName));
+                              
+          // 只要有任何一個成員的名字包含 (includes) 我的名字，就符合！
+          return allMembers.some(m => m.includes(searchName) || searchName.includes(m));
         });
 
         setProjects(myFilteredProjects);
@@ -122,7 +140,7 @@ export default function MyProjectsPage() {
             <Plus className="w-4 h-4" /> 建立專案
           </button>
 
-          {/* 🚀 真實登入狀態顯示區塊 */}
+          {/* 🚀 登入狀態顯示區塊 */}
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
             {currentUserId ? (
               <div className="flex items-center gap-3">
