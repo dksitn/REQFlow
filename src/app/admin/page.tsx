@@ -4,13 +4,17 @@ export const runtime = 'edge';
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/core/client/supabase';
-import { Loader2, Plus, Trash2, ShieldAlert, Check, Minus, Mail, User as UserIcon, Edit2, X, Building2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, ShieldAlert, Check, Minus, Mail, User as UserIcon, Edit2, X, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function PermissionsAdminPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  // 🚀 頂部導覽列的使用者狀態
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
   
   // 資料狀態 (以 m01_users 為唯一真相來源)
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
@@ -33,8 +37,14 @@ export default function PermissionsAdminPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/auth'); return; }
 
+      setCurrentUserEmail(user.email || '');
+
       const { data: profile } = await supabase.from('m01_users').select('*').eq('email', user.email).maybeSingle();
       
+      if (profile) {
+        setCurrentUserName(profile.full_name || '');
+      }
+
       if (profile?.system_role === 'admin') {
         setIsAdmin(true);
         const { data: uData } = await supabase.from('m01_users').select('*').order('created_at', { ascending: false });
@@ -45,6 +55,11 @@ export default function PermissionsAdminPage() {
     } catch (err) { console.error(err); } finally { setIsLoading(false); }
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/auth');
+  };
+
   // --- 🚀 統一新增：同時寫入 users 與 personnel ---
   const handleAddUser = async () => {
     if (!newEmail.trim() || !newName.trim() || !newDept || !isAdmin) {
@@ -53,14 +68,12 @@ export default function PermissionsAdminPage() {
     }
     setIsProcessing(true);
     try {
-      // 1. 寫入 m01_users (系統帳號)
       const { error: userError } = await supabase.from('m01_users').upsert(
         { email: newEmail.trim(), full_name: newName.trim(), system_role: newRole, department: newDept },
         { onConflict: 'email' }
       );
       if (userError) throw userError;
 
-      // 2. 為了專案下拉選單，同步寫入 m01_personnel
       await supabase.from('m01_personnel').insert({ name: newName.trim(), role_type: newDept });
 
       setNewEmail(''); setNewName(''); setNewDept('應用科'); setNewRole('user');
@@ -73,7 +86,6 @@ export default function PermissionsAdminPage() {
     if (!editModal.data.full_name.trim() || !editModal.data.email.trim()) return;
     setIsProcessing(true);
     try {
-      // 1. 更新 m01_users
       await supabase.from('m01_users').update({
         email: editModal.data.email.trim(),
         full_name: editModal.data.full_name.trim(),
@@ -81,11 +93,10 @@ export default function PermissionsAdminPage() {
         system_role: editModal.data.system_role
       }).eq('id', editModal.data.id);
 
-      // 2. 同步更新 m01_personnel (找舊名字替換成新名字與新科別)
       await supabase.from('m01_personnel').update({
         name: editModal.data.full_name.trim(),
         role_type: editModal.data.department
-      }).eq('name', editModal.data.original_name); // original_name 確保我們改對人
+      }).eq('name', editModal.data.original_name); 
 
       setEditModal({ isOpen: false, data: null });
       await checkAuthAndFetchData();
@@ -123,18 +134,34 @@ export default function PermissionsAdminPage() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-8 font-sans w-full max-w-[1400px] mx-auto">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
       
-      <div className="mb-8">
-        <h1 className="text-2xl font-black text-slate-900 tracking-tight">權限與人員管理</h1>
-        <p className="text-sm font-bold text-slate-500 mt-1">管理角色權限、一次性指派人員科別與系統登入 Email，確保資料同步一致。</p>
+      {/* 🚀 完美對齊的頂部導覽列 (Sticky Header) */}
+      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-black text-slate-900 tracking-tight">權限與人員管理</h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 pl-4">
+            <div className="flex flex-col items-end">
+              <span className="text-xs font-black text-slate-800">{currentUserName || '無資料庫綁定'}</span>
+              <span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span>
+            </div>
+            <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black border border-blue-200">
+              {currentUserName ? currentUserName.charAt(0) : <UserIcon className="w-5 h-5" />}
+            </div>
+            <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-6">
-        
-        {/* ========================================== */}
+      {/* 內容區塊 */}
+      <div className="px-8 pt-6 pb-12 max-w-[1400px] mx-auto w-full flex-1 flex flex-col gap-6">
+        <p className="text-sm font-bold text-slate-500 -mt-2 mb-2">管理角色權限、一次性指派人員科別與系統登入 Email，確保資料同步一致。</p>
+
         {/* 1. 角色與權限矩陣 */}
-        {/* ========================================== */}
         <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
             <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-black">1</div>
@@ -174,9 +201,7 @@ export default function PermissionsAdminPage() {
           </div>
         </section>
 
-        {/* ========================================== */}
         {/* 2. 一站式人員新增區 */}
-        {/* ========================================== */}
         <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
             <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-black">2</div>
@@ -209,9 +234,7 @@ export default function PermissionsAdminPage() {
           </div>
         </section>
 
-        {/* ========================================== */}
         {/* 3. 人員管理名單庫 (含編輯功能) */}
-        {/* ========================================== */}
         <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
             <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-black">3</div>
@@ -222,7 +245,7 @@ export default function PermissionsAdminPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {departmentsList.map((deptName) => {
                 const usersInDept = groupedUsers[deptName];
-                if (deptName === '未分類' && usersInDept.length === 0) return null; // 隱藏空的未分類
+                if (deptName === '未分類' && usersInDept.length === 0) return null;
                 
                 return (
                   <div key={deptName} className="bg-slate-50/50 rounded-xl p-4 border border-slate-100">
@@ -260,9 +283,7 @@ export default function PermissionsAdminPage() {
 
       </div>
 
-      {/* ========================================== */}
-      {/* 🚀 編輯人員彈窗 (Edit Modal) */}
-      {/* ========================================== */}
+      {/* 編輯人員彈窗 (Edit Modal) */}
       {editModal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95">
