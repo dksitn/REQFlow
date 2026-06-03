@@ -7,8 +7,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
 import {
   Loader2, ArrowLeft, Building2, Eye, X, Check, UploadCloud, RefreshCw,
-  Columns, Lock, Save, FileText, Printer, CheckCircle2, Unlock,
-  ChevronDown, Plus, Edit2, Search, LogOut, User as UserIcon, FileImage
+  Columns, Lock, Save, FileText, Printer, CheckCircle2, Unlock, FileImage,
+  ChevronDown, Plus, Edit2, Search, LogOut, User as UserIcon
 } from 'lucide-react';
 
 // ==========================================
@@ -38,22 +38,18 @@ function EditableCard({
         .maybeSingle();
 
       if (data) {
-        // 🕒 檢查鎖定是否超過 30 分鐘 (30 * 60 * 1000 ms)
         const lockedTime = new Date(data.locked_at).getTime();
         const now = Date.now();
         
         if (now - lockedTime > 30 * 60 * 1000) {
-          // 超過 30 分鐘：自動解除鎖定
           await supabase.from('m01_edit_locks').delete().eq('project_id', projectId).eq('field_name', fieldKey);
           setIsLockedByOther(false);
         } else if (data.locked_by !== currentUserId) {
-          // 未超時且是別人的鎖
           setIsLockedByOther(true); 
           const usersData: any = data.m01_users;
           const ownerName = Array.isArray(usersData) ? usersData[0]?.full_name : usersData?.full_name;
           setLockOwnerName(ownerName || '其他同事'); 
         } else {
-          // 是自己的鎖
           setIsLockedByOther(false); 
         }
       } else {
@@ -71,7 +67,6 @@ function EditableCard({
     try {
       if (!currentUserId) { setIsEditing(true); return; }
 
-      // 雙重檢查：避免兩個人同時按編輯
       const { data: existingLock } = await supabase.from('m01_edit_locks').select('locked_by, locked_at').eq('project_id', projectId).eq('field_name', fieldKey).maybeSingle();
       if (existingLock) {
         const isExpired = (Date.now() - new Date(existingLock.locked_at).getTime()) > 30 * 60 * 1000;
@@ -145,7 +140,6 @@ function EditableCard({
             <span className="flex items-center gap-1 text-[10px] font-bold bg-rose-50 text-rose-600 px-2 py-1 rounded">
               <Lock className="w-3 h-3" /> {lockOwnerName} 編輯中
             </span>
-            // ⚠️ 已經拔除這裡的強制解鎖按鈕
           )}
         </div>
       </div>
@@ -199,8 +193,99 @@ function EditableCard({
       )}
     </div>
   );
-};
+}
 
+// ==========================================
+// 🚀 元件 2：單位選擇彈窗 (加強錯誤提示與 Loading 版)
+// ==========================================
+const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [selected, setSelected] = useState(currentDept);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newDeptName, setNewDeptName] = useState('');
+  
+  const fetchDepts = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase.from('core_units').select('*').order('created_at');
+    if (error) {
+      console.error('讀取單位失敗:', error);
+    } else if (data) {
+      setDepartments(data);
+    }
+    setIsLoading(false);
+  };
+  
+  useEffect(() => { fetchDepts(); }, []);
+
+  const handleAddDept = async () => {
+    if(!newDeptName.trim()) return;
+    setIsAdding(true);
+    try {
+      const { error } = await supabase.from('core_units').insert({ name: newDeptName.trim() });
+      if (error) {
+        alert(`❌ 新增失敗：\n${error.message}\n(可能是單位名稱重複，或是資料庫 core_units 權限未開放)`);
+        throw error;
+      }
+      setNewDeptName(''); 
+      await fetchDepts(); 
+    } catch (error) {
+      console.error('新增單位錯誤:', error);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[80vh]">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <h2 className="text-base font-extrabold text-slate-800">選擇所屬單位</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex gap-2">
+          <input 
+            type="text" 
+            placeholder="新增單位 (按 Enter 送出)..." 
+            value={newDeptName} 
+            onChange={(e)=>setNewDeptName(e.target.value)} 
+            onKeyDown={(e) => e.key === 'Enter' && handleAddDept()}
+            disabled={isAdding}
+            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400 disabled:opacity-50" 
+          />
+          <button 
+            onClick={handleAddDept} 
+            disabled={isAdding || !newDeptName.trim()}
+            className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center justify-center disabled:opacity-50 min-w-[36px]"
+          >
+            {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4"/>}
+          </button>
+        </div>
+        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-2">
+          {isLoading ? (
+            <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : departments.length === 0 ? (
+            <div className="text-center py-6 text-xs font-bold text-slate-400">目前無單位，請在上方新增</div>
+          ) : (
+            departments.map(dept => (
+              <div 
+                key={dept.id} 
+                onClick={() => setSelected(dept.name)} 
+                className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between ${selected === dept.name ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+              >
+                {dept.name} {selected === dept.name && <Check className="w-4 h-4 text-blue-600" />}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border bg-white rounded-lg shadow-sm hover:bg-slate-50">取消</button>
+          <button onClick={() => onSave(selected)} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-700">確認</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ==========================================
 // 🚀 主頁面
@@ -290,7 +375,7 @@ export default function ProjectAssessmentPage() {
       try {
         await supabase.from('m01_edit_locks').delete().eq('project_id', projectId);
         alert('已成功解除所有鎖定！畫面將重新載入最新資料庫內容。');
-        window.location.reload(); // 重新整理網頁，捨棄舊狀態
+        window.location.reload(); 
       } catch (error) {
         console.error(error);
         alert('解鎖失敗，請稍後再試。');
@@ -373,10 +458,8 @@ export default function ProjectAssessmentPage() {
         const fieldKey = type === 'AS_IS' ? 'image_as_is' : 'image_to_be';
         const updatedConfirmed = { ...(project.confirmed_fields || {}), [fieldKey]: false };
         
-        // 標記舊圖片為非現行
         await supabase.from('m01_project_assessment_images').update({ is_current: false }).eq('project_id', projectId).eq('image_type', type);
         
-        // 寫入新圖片
         const { data } = await supabase
           .from('m01_project_assessment_images')
           .insert({ project_id: projectId, image_type: type, file_name: file.name, file_mime_type: file.type, image_binary: base64, thumbnail_binary: base64, is_current: true })
@@ -415,7 +498,7 @@ export default function ProjectAssessmentPage() {
           </button>
         </div>
         <div className="flex items-center gap-4">
-          {/* 🚀 新增：全站強制解鎖按鈕 */}
+          {/* 🚀 全站強制解鎖按鈕 */}
           <button 
             onClick={handleGlobalUnlock} 
             disabled={isUnlocking}
