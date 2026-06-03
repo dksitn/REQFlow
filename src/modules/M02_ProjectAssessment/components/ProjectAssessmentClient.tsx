@@ -1,11 +1,14 @@
 'use client';
 
+export const runtime = 'edge';
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation'; // 👈 引入網址參數讀取器
-import { ArrowLeft, HelpCircle, Lock, ChevronDown, Check, X, Save, Sparkles, Loader2 } from 'lucide-react';
-import { supabase } from '@/core/client/supabase'; // 👈 引入資料庫連線
+import { useParams } from 'next/navigation';
+import { ArrowLeft, ChevronDown, Check, X, Save, Sparkles, Loader2, Search } from 'lucide-react';
+import { supabase } from '@/core/client/supabase';
 
+// 引入其他切分好的子元件
 import DraftRecoveryModal from './DraftRecoveryModal';
 import ImageControlBox from './ImageControlBox';
 import AdvancedEvaluationGrid from './AdvancedEvaluationGrid';
@@ -18,115 +21,157 @@ interface ProjectDetails {
   priority: string;
 }
 
+// UI 配色設定檔案
+const DEPT_STYLES: Record<string, any> = {
+  '應用科': { text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', xBtn: 'hover:bg-emerald-200 hover:text-emerald-800' },
+  '企劃科': { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', xBtn: 'hover:bg-blue-200 hover:text-blue-800' },
+  '科技科': { text: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', xBtn: 'hover:bg-purple-200 hover:text-purple-800' },
+};
+
 export default function ProjectAssessmentClient() {
   const params = useParams();
-  const projectId = params.id as string; // 👈 從網址抓下 REQ-2026-XXX
+  const projectId = params.id as string;
 
   // --- 動態資料狀態 ---
   const [projectData, setProjectData] = useState<ProjectDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- 舊有的 UI 狀態 ---
-  const [isDraftOpen, setIsDraftOpen] = useState(false);
+  // --- 人員名單庫 (來自資料庫 m01_personnel，由 Admin 頁面統一管理) ---
+  const [personnelList, setPersonnelList] = useState<any[]>([]);
+  
+  // --- 專案已選取的負責人 ---
+  const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string[]>>({
+    '應用科': [],
+    '企劃科': [],
+    '科技科': []
+  });
+
+  // --- 彈窗與編輯狀態 ---
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const statusOptions = ['需求單位討論', '需求單位送單', '應用科評估完成', '智金處評估完成', 'POC案執行中', '專案處理'];
-
   const [isEditingPain, setIsEditingPain] = useState(false);
   const [painText, setPainText] = useState('現行消金會員推薦散落在各渠道系統，資料每週才更新一次，無法做到跨通路的即時行為標籤反饋，導致黃金行銷時間流失。');
+  const [isDraftOpen, setIsDraftOpen] = useState(false);
 
-  const appSectionOwners = ['趙俊安（應用科）', '邱仕翔（應用科）'];
-  const planSectionOwners = ['任文燕（企劃科）'];
-  const techSectionOwners = ['謝琇旻（科技科）', '郭珊珊（科技科）'];
+  // --- 選人彈窗 (Modal) 狀態 ---
+  const [assigneeModal, setAssigneeModal] = useState<{ isOpen: boolean; dept: string | null }>({ isOpen: false, dept: null });
+  const [tempSelections, setTempSelections] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // 🛡️ 核心邏輯：當元件載入時，去 Supabase 撈取這筆 ID 的真實資料
+  // 🛡️ 核心邏輯：載入專案資料 & 全站人員清單
   useEffect(() => {
-    async function fetchProjectDetail() {
+    async function fetchData() {
       if (!projectId) return;
-      
+      setIsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('m01_projects')
-          .select('*')
-          .eq('project_code', projectId)
-          .single(); // 我們只要唯一的一筆
-
-        if (error) throw error;
-
-        if (data) {
+        // 1. 撈取專案資訊
+        const { data: projData } = await supabase.from('m01_projects').select('*').eq('project_code', projectId).maybeSingle();
+        if (projData) {
           setProjectData({
-            id: data.project_code,
-            name: data.project_name,
-            unit: data.unit_name_snapshot || '未指定單位',
-            status: data.status_name_snapshot || '未指定狀態',
-            priority: data.priority
+            id: projData.project_code,
+            name: projData.project_name,
+            unit: projData.unit_name_snapshot || '未指定單位',
+            status: projData.status_name_snapshot || '未指定狀態',
+            priority: projData.priority || 'P1'
+          });
+        } else {
+          // 若無資料，先給個假資料避免畫面空白 (開發階段用)
+          setProjectData({
+            id: projectId,
+            name: '讀取中或無此專案',
+            unit: '系統預設',
+            status: '需求單位討論',
+            priority: 'P1'
           });
         }
+
+        // 2. 撈取全站負責人清單 (SSOT 真相來源)
+        const { data: pData } = await supabase.from('m01_personnel').select('*');
+        if (pData) setPersonnelList(pData);
+
       } catch (error) {
-        console.error('讀取專案詳情失敗:', error);
+        console.error('讀取資料失敗:', error);
       } finally {
         setIsLoading(false);
       }
     }
-
-    fetchProjectDetail();
+    fetchData();
   }, [projectId]);
 
+  // --- 選人彈窗控制邏輯 ---
+  const openAssigneeModal = (dept: string) => {
+    setTempSelections(selectedAssignees[dept] || []); 
+    setSearchTerm('');
+    setAssigneeModal({ isOpen: true, dept });
+  };
+
+  const toggleSelection = (name: string) => {
+    if (tempSelections.includes(name)) {
+      setTempSelections(tempSelections.filter(n => n !== name));
+    } else {
+      setTempSelections([...tempSelections, name]);
+    }
+  };
+
+  const confirmAssignees = () => {
+    if (assigneeModal.dept) {
+      setSelectedAssignees(prev => ({ ...prev, [assigneeModal.dept!]: tempSelections }));
+    }
+    setAssigneeModal({ isOpen: false, dept: null });
+  };
+
+  const removeAssignee = (dept: string, nameToRemove: string) => {
+    setSelectedAssignees(prev => ({
+      ...prev,
+      [dept]: prev[dept].filter(name => name !== nameToRemove)
+    }));
+  };
+
   return (
-    <div className="flex-1 bg-white p-8 overflow-y-auto w-full select-none max-w-[1400px] mx-auto space-y-8 pb-32">
+    <div className="flex-1 bg-slate-50/50 p-8 overflow-y-auto w-full select-none max-w-[1400px] mx-auto space-y-8 pb-32">
       
-      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <div className="flex items-center gap-3">
-          <Link href="/" className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
+          <Link href="/" className="p-1.5 rounded-lg border border-slate-200 text-slate-500 bg-white hover:bg-slate-50 transition-colors shadow-sm">
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
             <h1 className="text-lg font-bold text-slate-900 tracking-tight">個別專案綜合評估</h1>
-            <p className="text-[11px] text-slate-400 font-medium">
-              審查人員：<span className="text-slate-600 font-bold">沈廷翼 Admin</span>
-            </p>
           </div>
         </div>
         
-        <button 
-          onClick={() => setIsDraftOpen(true)}
-          className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-lg shadow-sm hover:bg-amber-100 transition-colors"
-        >
-          <Sparkles className="w-3.5 h-3.5 animate-spin" />
-          模擬背景偵測草稿
+        <button onClick={() => setIsDraftOpen(true)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-white text-slate-600 border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
+          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+          草稿紀錄
         </button>
       </div>
 
       <div className="space-y-6">
         
-        {/* 🛡️ 替換為動態資料區塊 */}
-        <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm shadow-slate-100/30 flex items-center justify-between relative min-h-[90px]">
+        {/* 專案標頭卡片 */}
+        <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm flex items-center justify-between relative min-h-[90px]">
           {isLoading ? (
             <div className="flex items-center gap-3 text-indigo-600">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm font-bold animate-pulse">正在載入專案資料...</span>
+              <span className="text-sm font-bold">載入中...</span>
             </div>
-          ) : projectData ? (
+          ) : projectData && (
             <>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200/40">
-                    {projectData.id} {/* 👈 真實 ID */}
-                  </span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${projectData.priority === 'P0' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
-                    {projectData.priority} 優先級 {/* 👈 真實優先級 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200/50">{projectData.id}</span>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded border ${projectData.priority === 'P0' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+                    {projectData.priority}
                   </span>
                 </div>
-                <h2 className="text-base font-bold text-slate-900">{projectData.name} {/* 👈 真實名稱 */}</h2>
-                <p className="text-xs text-slate-400 font-medium">需求單位：{projectData.unit} {/* 👈 真實單位 */}</p>
+                <h2 className="text-base font-black text-slate-800">{projectData.name}</h2>
+                <p className="text-xs text-slate-400 font-bold flex items-center gap-1">單位：{projectData.unit}</p>
               </div>
 
               <div className="relative">
-                <button 
-                  onClick={() => setIsStatusOpen(!isStatusOpen)}
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50/60 border border-indigo-100 rounded-full shadow-sm hover:bg-indigo-50 transition-all"
-                >
+                <button onClick={() => setIsStatusOpen(!isStatusOpen)} className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-indigo-600 bg-indigo-50/60 border border-indigo-100 rounded-lg shadow-sm hover:bg-indigo-50 transition-all">
                   <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse"></span>
-                  {projectData.status} {/* 👈 真實狀態 */}
+                  {projectData.status}
                   <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />
                 </button>
 
@@ -134,17 +179,9 @@ export default function ProjectAssessmentClient() {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsStatusOpen(false)} />
                     <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-50">
-                      <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 border-b border-slate-100 mb-1">選擇專案狀態 (單選)</div>
+                      <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 border-b border-slate-100 mb-1">選擇狀態 (單選)</div>
                       {statusOptions.map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => { 
-                            setProjectData({...projectData, status}); 
-                            setIsStatusOpen(false); 
-                            // 💡 下一步我們可以在這裡接上 API 寫回資料庫的更新功能
-                          }}
-                          className="w-full flex items-center justify-between px-2.5 py-2 text-xs rounded-lg font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-                        >
+                        <button key={status} onClick={() => { setProjectData({...projectData, status}); setIsStatusOpen(false); }} className="w-full flex items-center justify-between px-2.5 py-2 text-xs rounded-lg font-bold text-slate-700 hover:bg-slate-50 transition-colors">
                           <span>{status}</span>
                           {projectData.status === status && <Check className="w-3.5 h-3.5 text-indigo-600" />}
                         </button>
@@ -154,80 +191,157 @@ export default function ProjectAssessmentClient() {
                 )}
               </div>
             </>
-          ) : (
-            <div className="text-sm font-bold text-rose-500">找不到專案資料，請確認網址是否正確。</div>
           )}
         </div>
 
-        {/* --- 以下保持不變 (負責人、文字框、圖表) --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div className="border border-slate-200/80 rounded-xl p-4 bg-white shadow-sm flex flex-col justify-between">
-            <div>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">應用科負責人 (多選)</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {appSectionOwners.map(name => <span key={name} className="text-[11px] font-bold bg-slate-50 border border-slate-200 px-2 py-0.5 rounded text-slate-700">{name}</span>)}
-              </div>
-            </div>
-          </div>
-          <div className="border border-slate-200/80 rounded-xl p-4 bg-white shadow-sm flex flex-col justify-between">
-            <div>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">企劃科負責人 (多選)</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {planSectionOwners.map(name => <span key={name} className="text-[11px] font-bold bg-slate-50 border border-slate-200 px-2 py-0.5 rounded text-slate-700">{name}</span>)}
-              </div>
-            </div>
-          </div>
-          <div className="border border-slate-200/80 rounded-xl p-4 bg-white shadow-sm flex flex-col justify-between">
-            <div>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">科技科負責人 (多選)</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {techSectionOwners.map(name => <span key={name} className="text-[11px] font-bold bg-slate-50 border border-slate-200 px-2 py-0.5 rounded text-slate-700">{name}</span>)}
-              </div>
-            </div>
+        <div className="px-2">
+          <h3 className="text-sm font-black text-slate-800 mb-4 tracking-tight">專案負責人</h3>
+          {/* 🛡️ 負責人選擇區塊 (支援三科別) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {['應用科', '企劃科', '科技科'].map((dept) => {
+              const style = DEPT_STYLES[dept];
+              const assignees = selectedAssignees[dept];
+
+              return (
+                <div key={dept} className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm flex flex-col justify-between h-full min-h-[140px]">
+                  <div>
+                    <h4 className={`text-xs font-black mb-3 ${style.text}`}>{dept}</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {assignees.length === 0 ? (
+                        <span className="text-xs font-bold text-slate-300">尚未指派</span>
+                      ) : (
+                        assignees.map(name => (
+                          <div key={name} className={`flex items-center gap-1.5 text-[11px] font-bold ${style.bg} ${style.text} ${style.border} border px-2.5 py-1 rounded-md shadow-sm`}>
+                            {name}
+                            <button onClick={() => removeAssignee(dept, name)} className={`p-0.5 rounded-sm transition-colors ${style.xBtn}`}><X className="w-3 h-3" /></button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <button onClick={() => openAssigneeModal(dept)} className="mt-4 w-full border border-dashed border-slate-300 rounded-lg py-2 text-[11px] font-bold text-slate-400 hover:text-slate-600 hover:border-slate-400 hover:bg-slate-50 transition-all flex items-center justify-center gap-1">
+                    選擇人員 +
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* --- 痛點編輯區 --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-8">
           <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">工作職掌與現行工作流程</h3>
-            <p className="text-xs text-slate-700 font-semibold leading-relaxed">消金推廣人員手動自業務系統撈取上週報表，經 Excel 篩選後，再匯入個別通路系統執行單點行銷。</p>
+            <h3 className="text-xs font-black text-indigo-600 mb-3">工作職掌與現行工作流程</h3>
+            <p className="text-xs text-slate-600 font-bold leading-relaxed">消金推廣人員手動自業務系統撈取上週報表，經 Excel 篩選後，再匯入個別通路系統執行單點行銷。</p>
           </div>
 
           <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm relative group">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">現行作業痛點</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-black text-rose-600">現行作業痛點</h3>
               {!isEditingPain ? (
-                <button onClick={() => setIsEditingPain(true)} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">編輯</button>
+                <button onClick={() => setIsEditingPain(true)} className="text-[10px] font-bold text-slate-500 border border-slate-200 bg-white px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-50 shadow-sm">點擊編輯</button>
               ) : (
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setIsEditingPain(false)} className="p-0.5 text-slate-400"><X className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => setIsEditingPain(false)} className="p-0.5 text-emerald-600 bg-emerald-50 rounded"><Save className="w-3.5 h-3.5" /></button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setIsEditingPain(false)} className="px-3 py-1 text-[10px] font-bold text-slate-500 border border-slate-200 rounded-md hover:bg-slate-50">取消</button>
+                  <button onClick={() => setIsEditingPain(false)} className="px-3 py-1 text-[10px] font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm flex items-center gap-1"><Check className="w-3 h-3"/> 確認計分</button>
                 </div>
               )}
             </div>
             {isEditingPain ? (
-              <textarea rows={3} value={painText} onChange={(e) => setPainText(e.target.value)} className="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-indigo-500 font-medium text-slate-700" />
+              <textarea rows={3} value={painText} onChange={(e) => setPainText(e.target.value)} className="w-full text-xs border border-slate-200 rounded-lg p-3 focus:outline-none focus:border-indigo-400 font-bold text-slate-700 shadow-inner bg-slate-50/50" />
             ) : (
-              <p className="text-xs text-slate-700 font-semibold leading-relaxed">{painText}</p>
+              <p className="text-xs text-slate-600 font-bold leading-relaxed">{painText}</p>
             )}
           </div>
         </div>
 
+        {/* 圖片上傳區塊 */}
         <ImageControlBox />
-
       </div>
 
+      {/* 下方進階評估區塊 */}
       <AdvancedEvaluationGrid />
 
+      {/* 🚀 選擇人員彈窗 (純消費者模式：無新增按鈕，統一從 Admin 管理) */}
+      {assigneeModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95">
+            
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <h2 className="text-sm font-black text-slate-800 tracking-tight">管理 {assigneeModal.dept} 專案成員</h2>
+              <button onClick={() => setAssigneeModal({ isOpen: false, dept: null })} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-4 h-4"/></button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              {/* 純搜尋框 */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input 
+                  type="text" 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="搜尋姓名..." 
+                  className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 shadow-sm"
+                />
+              </div>
+
+              {/* ⚠️ 完全移除「快速新增」功能，只顯示 Admin 核准的名單！ */}
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                {personnelList
+                  .filter(p => p.role_type === assigneeModal.dept)
+                  .filter(p => p.name.includes(searchTerm))
+                  .length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-xs font-bold text-slate-400">系統中無符合條件的人員</p>
+                      <p className="text-[10px] font-bold text-rose-500 mt-1">※ 若需增加人員，請聯繫 Admin 至「權限管理」頁面統一建檔。</p>
+                    </div>
+                ) : (
+                  personnelList
+                    .filter(p => p.role_type === assigneeModal.dept)
+                    .filter(p => p.name.includes(searchTerm))
+                    .map(p => {
+                      const isSelected = tempSelections.includes(p.name);
+                      return (
+                        <div 
+                          key={p.id} 
+                          onClick={() => toggleSelection(p.name)}
+                          className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${isSelected ? 'border-blue-400 bg-blue-50/50 shadow-sm' : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white ${isSelected ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                              {p.name.charAt(0)}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className={`text-xs font-black ${isSelected ? 'text-blue-900' : 'text-slate-700'}`}>{p.name}</span>
+                              <span className="text-[10px] font-bold text-slate-400">{p.role_type}</span>
+                            </div>
+                          </div>
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white'}`}>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-100 flex gap-3 bg-slate-50/50">
+              <button onClick={() => setAssigneeModal({ isOpen: false, dept: null })} className="flex-1 py-2.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm transition-all">取消</button>
+              <button onClick={confirmAssignees} className="flex-1 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2 transition-all">
+                確認名單 ({tempSelections.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 草稿恢復彈窗 */}
       <DraftRecoveryModal 
         isOpen={isDraftOpen} 
         onClose={() => setIsDraftOpen(false)} 
-        onRecover={() => {
-          setPainText('現行消金會員推薦散落在各渠道系統，資料每週才更新一次。最新補件：且因分行通路與 App 標籤未即時連動，導致第一線臨櫃行銷發生資訊不對稱，黃金交叉銷售時間嚴重流失。');
-          setIsDraftOpen(false);
-        }}
+        onRecover={() => { setPainText('備份內容恢復測試'); setIsDraftOpen(false); }}
       />
-
     </div>
   );
 }
