@@ -5,13 +5,16 @@ export const runtime = 'edge';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, SlidersHorizontal, ChevronDown, Plus, LogOut, User as UserIcon } from 'lucide-react';
+import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, Plus, LogOut, User as UserIcon } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 🚀 新增狀態：用於控制卡片篩選 (預設為 ALL)
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'EVAL' | 'POC' | 'PENDING'>('ALL');
 
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
@@ -31,18 +34,13 @@ export default function DashboardPage() {
         const { data, error } = await supabase.from('m01_projects').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         setProjects(data || []);
-      } catch (err) {
-        console.error('讀取首頁資料失敗:', err);
-      } finally {
-        setIsLoading(false);
-      }
+      } catch (err) { console.error(err); } finally { setIsLoading(false); }
     }
     fetchDashboardData();
   }, []);
 
   const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/auth'); };
 
-  // 🚀 資料完整度計算 (基準：11格)
   const calculateCompleteness = (proj: any) => {
     let score = 0;
     const confirmed = proj.confirmed_fields || {};
@@ -51,7 +49,6 @@ export default function DashboardPage() {
     return Math.round((score / 11) * 100);
   };
 
-  // 🚀 風險直接切換寫入 DB
   const handleRiskChange = async (projectId: string, newRisk: string) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, risk_level: newRisk } : p));
     await supabase.from('m01_projects').update({ risk_level: newRisk }).eq('id', projectId);
@@ -61,15 +58,8 @@ export default function DashboardPage() {
     const currentRisk = proj.risk_level || '低';
     const bg = currentRisk === '高' ? 'bg-rose-50 text-rose-600 border-rose-200' : currentRisk === '中' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200';
     return (
-      <select 
-        value={currentRisk} 
-        onChange={(e) => handleRiskChange(proj.id, e.target.value)} 
-        onClick={(e) => e.stopPropagation()} 
-        className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm transition-all ${bg}`}
-      >
-        <option value="低" className="text-emerald-600 font-bold">低</option>
-        <option value="中" className="text-amber-600 font-bold">中</option>
-        <option value="高" className="text-rose-600 font-bold">高</option>
+      <select value={currentRisk} onChange={(e) => handleRiskChange(proj.id, e.target.value)} onClick={(e) => e.stopPropagation()} className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm transition-all ${bg}`}>
+        <option value="低" className="text-emerald-600 font-bold">低</option><option value="中" className="text-amber-600 font-bold">中</option><option value="高" className="text-rose-600 font-bold">高</option>
       </select>
     );
   };
@@ -90,7 +80,6 @@ export default function DashboardPage() {
     return all.length > 0 ? all.join(', ') : '未指定';
   };
 
-  // 🚀 嚴格分類計算邏輯
   const evalStatuses = ['需求單位討論', '需求單位送單', '應用科評估完成', '智金處評估完成'];
   const pocStatuses = ['POC案執行中'];
   const pendingStatuses = ['暫緩案'];
@@ -98,9 +87,16 @@ export default function DashboardPage() {
   const evalCount = projects.filter(p => evalStatuses.includes(p.status_name_snapshot)).length;
   const pocCount = projects.filter(p => pocStatuses.includes(p.status_name_snapshot)).length;
   const pendingCount = projects.filter(p => pendingStatuses.includes(p.status_name_snapshot)).length;
-  const totalCount = evalCount + pocCount + pendingCount; // 嚴格相加
+  const totalCount = evalCount + pocCount + pendingCount;
 
-  const filteredProjects = projects.filter(p => {
+  // 🚀 核心過濾器：依照 activeFilter 過濾專案
+  let baseFilteredProjects = projects;
+  if (activeFilter === 'EVAL') baseFilteredProjects = projects.filter(p => evalStatuses.includes(p.status_name_snapshot));
+  else if (activeFilter === 'POC') baseFilteredProjects = projects.filter(p => pocStatuses.includes(p.status_name_snapshot));
+  else if (activeFilter === 'PENDING') baseFilteredProjects = projects.filter(p => pendingStatuses.includes(p.status_name_snapshot));
+
+  // 加上文字搜尋過濾
+  const finalFilteredProjects = baseFilteredProjects.filter(p => {
     const s = searchTerm.toLowerCase();
     return (p.name?.toLowerCase().includes(s) || p.project_code?.toLowerCase().includes(s) || p.department?.toLowerCase().includes(s) || getResponsiblesString(p).toLowerCase().includes(s));
   });
@@ -124,20 +120,22 @@ export default function DashboardPage() {
       </div>
 
       <div className="px-8 pt-8 pb-12 max-w-[1600px] mx-auto w-full flex-1">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between">
+        
+        {/* 🚀 點擊卡片觸發篩選 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 cursor-pointer select-none">
+          <div onClick={() => setActiveFilter('ALL')} className={`bg-white rounded-2xl p-5 shadow-sm flex items-start justify-between transition-all ${activeFilter === 'ALL' ? 'ring-2 ring-blue-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-blue-200'}`}>
             <div><p className="text-[11px] font-bold text-slate-400 mb-1">專案總數</p><p className="text-3xl font-black text-slate-900">{totalCount}</p></div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#3B82F6] flex items-center justify-center"><Folder className="w-5 h-5" /></div>
           </div>
-          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between">
+          <div onClick={() => setActiveFilter('EVAL')} className={`bg-white rounded-2xl p-5 shadow-sm flex items-start justify-between transition-all ${activeFilter === 'EVAL' ? 'ring-2 ring-emerald-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-emerald-200'}`}>
             <div><p className="text-[11px] font-bold text-slate-400 mb-1">評估案</p><p className="text-3xl font-black text-[#10B981]">{evalCount}</p></div>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#10B981] flex items-center justify-center"><CheckSquare className="w-5 h-5" /></div>
           </div>
-          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between">
+          <div onClick={() => setActiveFilter('POC')} className={`bg-white rounded-2xl p-5 shadow-sm flex items-start justify-between transition-all ${activeFilter === 'POC' ? 'ring-2 ring-purple-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-purple-200'}`}>
             <div><p className="text-[11px] font-bold text-slate-400 mb-1">POC案</p><p className="text-3xl font-black text-[#A855F7]">{pocCount}</p></div>
             <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#A855F7] flex items-center justify-center"><FlaskConical className="w-5 h-5" /></div>
           </div>
-          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-start justify-between">
+          <div onClick={() => setActiveFilter('PENDING')} className={`bg-white rounded-2xl p-5 shadow-sm flex items-start justify-between transition-all ${activeFilter === 'PENDING' ? 'ring-2 ring-amber-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-amber-200'}`}>
             <div><p className="text-[11px] font-bold text-slate-400 mb-1">暫緩案</p><p className="text-3xl font-black text-[#F59E0B]">{pendingCount}</p></div>
             <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#F59E0B] flex items-center justify-center"><Hourglass className="w-5 h-5" /></div>
           </div>
@@ -145,8 +143,11 @@ export default function DashboardPage() {
 
         <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-[500px]">
           <div className="p-6 border-b border-slate-50 flex items-center justify-between">
-            <div className="flex items-center gap-3"><h2 className="text-lg font-black text-slate-800">全部專案</h2><span className="text-sm font-bold text-slate-400">(共 {filteredProjects.length} 筆)</span></div>
-            <div className="relative w-64"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" placeholder="搜尋專案..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500" /></div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-black text-slate-800">{activeFilter === 'ALL' ? '全部專案' : activeFilter === 'EVAL' ? '評估案' : activeFilter === 'POC' ? 'POC案' : '暫緩案'}</h2>
+              <span className="text-sm font-bold text-slate-400">(共 {finalFilteredProjects.length} 筆)</span>
+            </div>
+            <div className="relative w-64"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" placeholder="搜尋名稱、編號..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500" /></div>
           </div>
 
           <div className="overflow-x-auto">
@@ -165,7 +166,7 @@ export default function DashboardPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? <tr><td colSpan={8} className="py-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></td></tr> : 
-                  filteredProjects.map((proj) => {
+                  finalFilteredProjects.map((proj) => {
                     const comp = calculateCompleteness(proj);
                     return (
                       <tr key={proj.id} onDoubleClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-blue-50/50 cursor-pointer">
