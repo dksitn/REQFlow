@@ -1,6 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ==========================================
+   🚀 Tailwind CSS v4 核心引擎與強制掃描指令
+   ========================================== */
+@import "tailwindcss";
+@source "../"; /* 強制 Tailwind 掃描 src 底下的所有資料夾 (包含 admin 等新資料夾) */
+
 
 /* ==========================================
    🚀 客製化右側下拉滑桿 (Mac OS Style Scrollbar)
