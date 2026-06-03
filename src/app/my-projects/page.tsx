@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, SlidersHorizontal, ChevronDown, Plus, ChevronRight, AlertTriangle, LogOut, User as UserIcon } from 'lucide-react';
+import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, Plus, ChevronRight, LogOut, User as UserIcon } from 'lucide-react';
 
 export default function MyProjectsPage() {
   const router = useRouter();
@@ -13,7 +13,6 @@ export default function MyProjectsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 🚀 真實登入狀態與使用者資訊
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [currentUserName, setCurrentUserName] = useState<string>('');
@@ -22,46 +21,26 @@ export default function MyProjectsPage() {
     async function fetchMyProjectsData() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        let myEmail = '';
         let myName = ''; 
-
         if (user) {
-          myEmail = user.email || '';
           setCurrentUserId(user.id);
-          setCurrentUserEmail(myEmail);
-          
-          // 從 m01_users 獲取真實姓名
-          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', myEmail).maybeSingle();
+          setCurrentUserEmail(user.email || '');
+          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
           if (profile?.full_name) {
             myName = profile.full_name;
             setCurrentUserName(myName);
           }
         }
 
-        const { data, error } = await supabase
-          .from('m01_projects')
-          .select('*')
-          .order('created_at', { ascending: false });
-
+        const { data, error } = await supabase.from('m01_projects').select('*').order('created_at', { ascending: false });
         if (error) throw error;
 
-        // 🚀 強力過濾邏輯：只顯示「team_members」裡有包含我的專案
+        // 🚀 只過濾出「我是負責人」的專案
         const searchName = myName.trim(); 
-        
         const myFilteredProjects = (data || []).filter(p => {
           if (!searchName) return false; 
-          
           const team = p.team_members || {};
-          // 攤平所有科別的人員名單
-          const allMembers = [
-            ...(team['應用科'] || []), 
-            ...(team['企劃科'] || []), 
-            ...(team['科技科'] || []),
-            ...(team['app'] || []),
-            ...(team['planning'] || []),
-            ...(team['tech'] || [])
-          ].map(m => m.trim());
-                              
+          const allMembers = [...(team['應用科']||[]), ...(team['企劃科']||[]), ...(team['科技科']||[])].map(m => m.trim());
           return allMembers.includes(searchName);
         });
 
@@ -75,158 +54,141 @@ export default function MyProjectsPage() {
     fetchMyProjectsData();
   }, []);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/auth');
-  };
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/auth'); };
 
   const calculateCompleteness = (proj: any) => {
     let score = 0;
     const confirmed = proj.confirmed_fields || {};
-    const fields = ['workflow_text', 'as_is_text', 'to_be_text', 'impact_people_text', 'impact_time_text', 'impact_benefit_text', 'image_as_is', 'image_to_be', 'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'];
+    const fields = ['workflow_text', 'as_is_text', 'impact_people_text', 'impact_time_text', 'impact_benefit_text', 'image_as_is', 'image_to_be', 'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'];
     fields.forEach(f => { if (confirmed[f]) score++; });
-    return Math.round((score / 12) * 100);
+    return Math.round((score / 11) * 100);
   };
 
-  const getRiskStatus = (percent: number) => {
-    if (percent > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', label: '低' };
-    if (percent >= 40) return { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', label: '中' };
-    return { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200', label: '高' };
+  const handleRiskChange = async (projectId: string, newRisk: string) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, risk_level: newRisk } : p));
+    await supabase.from('m01_projects').update({ risk_level: newRisk }).eq('id', projectId);
+  };
+
+  const getRiskSelector = (proj: any) => {
+    const currentRisk = proj.risk_level || '低';
+    const bg = currentRisk === '高' ? 'bg-rose-50 text-rose-600 border-rose-200' : currentRisk === '中' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200';
+    return (
+      <select value={currentRisk} onChange={(e) => handleRiskChange(proj.id, e.target.value)} onClick={(e) => e.stopPropagation()} className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm ${bg}`}>
+        <option value="低" className="text-emerald-600">低</option><option value="中" className="text-amber-600">中</option><option value="高" className="text-rose-600">高</option>
+      </select>
+    );
   };
 
   const formatDate = (dateString: string, isShort = false) => {
     if (!dateString) return '-';
-    const date = new Date(dateString);
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const HH = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    if (isShort) return `${mm}/${dd} ${HH}:${min}`;
-    return `${date.getFullYear()}/${mm}/${dd} ${HH}:${min}`;
+    const d = new Date(dateString);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const HH = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return isShort ? `${mm}/${dd} ${HH}:${min}` : `${d.getFullYear()}/${mm}/${dd} ${HH}:${min}`;
   };
 
-  // 🚀 精準解析負責人
   const getResponsiblesString = (proj: any) => {
     const team = proj.team_members || {};
-    const allMembers = [
-      ...(team['應用科'] || []), 
-      ...(team['企劃科'] || []), 
-      ...(team['科技科'] || []),
-      ...(team['app'] || []),
-      ...(team['planning'] || []),
-      ...(team['tech'] || [])
-    ];
-    return allMembers.length > 0 ? allMembers.join(', ') : '未指定';
+    const all = [...(team['應用科']||[]), ...(team['企劃科']||[]), ...(team['科技科']||[])];
+    return all.length > 0 ? all.join(', ') : '未指定';
   };
 
-  const totalMyProjects = projects.length;
-  const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
-  const staleProjectsCount = projects.filter(p => (Date.now() - new Date(p.updated_at || p.created_at).getTime()) > threeDaysInMs).length;
-  const incompleteProjectsCount = projects.filter(p => calculateCompleteness(p) < 100).length;
+  const evalStatuses = ['需求單位討論', '需求單位送單', '應用科評估完成', '智金處評估完成'];
+  const pocStatuses = ['POC案執行中'];
+  const pendingStatuses = ['暫緩案'];
 
-  const finalRenderedProjects = projects.filter(p => {
-    const searchLower = searchTerm.toLowerCase();
-    const membersString = getResponsiblesString(p).toLowerCase();
-    return (
-      (p.name && p.name.toLowerCase().includes(searchLower)) || 
-      (p.project_code && p.project_code.toLowerCase().includes(searchLower)) || 
-      (p.department && p.department.toLowerCase().includes(searchLower)) ||
-      membersString.includes(searchLower)
-    );
+  const evalCount = projects.filter(p => evalStatuses.includes(p.status_name_snapshot)).length;
+  const pocCount = projects.filter(p => pocStatuses.includes(p.status_name_snapshot)).length;
+  const pendingCount = projects.filter(p => pendingStatuses.includes(p.status_name_snapshot)).length;
+  const totalMyProjects = evalCount + pocCount + pendingCount;
+
+  // 🚀 側邊欄待辦計算
+  const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+  const staleCount = projects.filter(p => (Date.now() - new Date(p.updated_at || p.created_at).getTime()) > threeDaysInMs).length;
+  const incompleteCount = projects.filter(p => calculateCompleteness(p) < 100).length;
+
+  const filteredProjects = projects.filter(p => {
+    const s = searchTerm.toLowerCase();
+    return (p.name?.toLowerCase().includes(s) || p.project_code?.toLowerCase().includes(s) || p.department?.toLowerCase().includes(s) || getResponsiblesString(p).toLowerCase().includes(s));
   });
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+        <h1 className="text-lg font-black text-slate-900 tracking-tight">我的負責案件</h1>
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-black text-slate-900 tracking-tight">我的負責案件 (個人工作區)</h1>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#3B82F6] text-white text-xs font-bold rounded-lg hover:bg-blue-600 shadow-sm transition-all">
-            <Plus className="w-4 h-4" /> 建立專案
-          </button>
-
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#3B82F6] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-600"><Plus className="w-4 h-4" /> 建立專案</button>
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
             {currentUserId ? (
               <div className="flex items-center gap-3">
-                <div className="flex flex-col items-end">
-                  <span className="text-xs font-black text-slate-800">{currentUserName || '無資料庫綁定'}</span>
-                  <span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span>
-                </div>
-                <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black border border-blue-200">
-                  {currentUserName ? currentUserName.charAt(0) : <UserIcon className="w-5 h-5" />}
-                </div>
-                <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors">
-                  <LogOut className="w-4 h-4" />
-                </button>
+                <div className="flex flex-col items-end"><span className="text-xs font-black text-slate-800">{currentUserName}</span><span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span></div>
+                <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black border border-blue-200">{currentUserName.charAt(0)}</div>
+                <button onClick={handleSignOut} className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500"><LogOut className="w-4 h-4" /></button>
               </div>
-            ) : (
-              <button onClick={() => router.push('/auth')} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">未登入 (前往登入)</button>
-            )}
+            ) : <button onClick={() => router.push('/auth')} className="text-xs font-bold text-blue-600">前往登入</button>}
           </div>
         </div>
       </div>
 
       <div className="px-8 pt-8 pb-12 max-w-[1600px] mx-auto w-full flex-1 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-8 items-start">
         <div className="flex flex-col gap-6 min-w-0">
-          
-          {!isLoading && totalMyProjects === 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 shadow-sm">
-              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-bold text-amber-800">目前沒有匹配的案件</h3>
-                <p className="text-xs text-amber-700 mt-1">
-                  系統正在尋找專案負責人包含 <strong className="bg-amber-200 px-1 rounded">{currentUserName || '尚未由 Admin 綁定姓名'}</strong> 的案件。
-                </p>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex justify-between">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">專案總數</p><p className="text-3xl font-black text-slate-900">{totalMyProjects}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#3B82F6] flex justify-center items-center"><Folder className="w-5 h-5" /></div>
             </div>
-          )}
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex justify-between">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">評估案</p><p className="text-3xl font-black text-[#10B981]">{evalCount}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#10B981] flex justify-center items-center"><CheckSquare className="w-5 h-5" /></div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex justify-between">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">POC案</p><p className="text-3xl font-black text-[#A855F7]">{pocCount}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#A855F7] flex justify-center items-center"><FlaskConical className="w-5 h-5" /></div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex justify-between">
+              <div><p className="text-[11px] font-bold text-slate-400 mb-1">暫緩案</p><p className="text-3xl font-black text-[#F59E0B]">{pendingCount}</p></div>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#F59E0B] flex justify-center items-center"><Hourglass className="w-5 h-5" /></div>
+            </div>
+          </div>
 
-          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col flex-1 min-h-[500px]">
-            <div className="p-6 border-b border-slate-50">
-              <div className="flex items-center gap-3 mb-5"><h2 className="text-lg font-black text-slate-800">專案清單</h2><span className="text-sm font-bold text-slate-400">(共 {finalRenderedProjects.length} 筆)</span></div>
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input type="text" placeholder="搜尋專案名稱或編號..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-500" />
-              </div>
+          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-[500px]">
+            <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-3"><h2 className="text-lg font-black text-slate-800">專案清單</h2><span className="text-sm font-bold text-slate-400">(共 {filteredProjects.length} 筆)</span></div>
+              <div className="relative w-64"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" placeholder="搜尋專案..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500" /></div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse whitespace-nowrap">
                 <thead>
                   <tr className="border-b-2 border-slate-100 bg-white">
-                    <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">專案編號</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">專案名稱</th>
+                    <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">編號</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">名稱</th>
                     <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">狀態</th>
                     <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">負責人</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase w-32">資料完整度</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase text-center">風險</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase w-32">完整度</th>
+                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase text-center">風險(可選)</th>
                     <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">最後更新</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {isLoading ? (
-                    <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400"><Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />載入中...</td></tr>
-                  ) : finalRenderedProjects.length === 0 ? (
-                    <tr><td colSpan={7} className="px-6 py-12 text-center text-sm font-bold text-slate-400">目前沒有您負責的專案</td></tr>
-                  ) : (
-                    finalRenderedProjects.map((proj) => {
-                      const completeness = calculateCompleteness(proj);
-                      const risk = getRiskStatus(completeness);
+                  {isLoading ? <tr><td colSpan={7} className="py-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></td></tr> : 
+                    filteredProjects.map((proj) => {
+                      const comp = calculateCompleteness(proj);
                       return (
-                        <tr key={proj.id} onDoubleClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-blue-50/50 transition-colors cursor-pointer group">
-                          <td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-[14px] h-[14px] rounded-full border-[3px] border-[#3B82F6] flex items-center justify-center shrink-0"><div className="w-[4px] h-[4px] rounded-full bg-[#3B82F6]"></div></div><span className="text-xs font-bold text-slate-500">{proj.project_code}</span></div></td>
-                          <td className="px-4 py-4"><span className="text-sm font-black text-slate-800 group-hover:text-blue-600 transition-colors">{proj.name || proj.project_name}</span></td>
-                          <td className="px-4 py-4"><span className="text-xs font-black text-[#3B82F6]">{proj.status_name_snapshot || '未立案'}</span></td>
+                        <tr key={proj.id} onDoubleClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-blue-50/50 cursor-pointer">
+                          <td className="px-6 py-4 text-xs font-bold text-slate-500">{proj.project_code}</td>
+                          <td className="px-4 py-4 text-sm font-black text-slate-800">{proj.name || proj.project_name}</td>
+                          <td className="px-4 py-4 text-xs font-black text-[#3B82F6]">{proj.status_name_snapshot || '未立案'}</td>
                           <td className="px-4 py-4 text-xs font-bold text-slate-700 truncate max-w-[150px]">{getResponsiblesString(proj)}</td>
-                          <td className="px-4 py-4"><div className="flex items-center gap-2 w-full"><div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex-1"><div className="h-full bg-[#3B82F6] rounded-full" style={{ width: `${completeness}%` }} /></div><span className="text-[10px] font-black text-slate-600 w-6">{completeness}%</span></div></td>
-                          <td className="px-4 py-4 text-center"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black border ${risk.bg} ${risk.text} ${risk.border}`}>{risk.label}</span></td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-400 font-mono tracking-tighter">{formatDate(proj.updated_at || proj.created_at, true)}</td>
+                          <td className="px-4 py-4"><div className="flex items-center gap-2"><div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex-1"><div className="h-full bg-[#3B82F6] rounded-full" style={{ width: `${comp}%` }} /></div><span className="text-[10px] font-black text-slate-600">{comp}%</span></div></td>
+                          <td className="px-4 py-4 text-center">{getRiskSelector(proj)}</td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-400 font-mono">{formatDate(proj.updated_at || proj.created_at, true)}</td>
                         </tr>
                       );
                     })
-                  )}
+                  }
                 </tbody>
               </table>
             </div>
@@ -237,13 +199,13 @@ export default function MyProjectsPage() {
           <section>
             <h3 className="text-sm font-black text-slate-800 mb-4 px-1">我的待辦事項</h3>
             <div className="flex flex-col gap-2.5">
-              <div className="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all group">
-                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600 transition-colors">待更新 <span className="text-slate-400 font-medium">(超時未動)</span></span></div>
-                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
+              <div className="flex justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:border-orange-200 group">
+                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600">待更新 <span className="text-slate-400">(超3天)</span></span></div>
+                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
               </div>
-              <div className="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all group">
-                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0"><Folder className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">待補資料 <span className="text-slate-400 font-medium">(未達100%)</span></span></div>
-                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{incompleteProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
+              <div className="flex justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:border-blue-200 group">
+                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0"><Folder className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">待補資料 <span className="text-slate-400">(&lt;100%)</span></span></div>
+                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{incompleteCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
               </div>
             </div>
           </section>
