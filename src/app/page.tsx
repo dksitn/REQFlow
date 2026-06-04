@@ -6,6 +6,8 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
 import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, SlidersHorizontal, ChevronDown, Plus, LogOut, User as UserIcon } from 'lucide-react';
+// 🚀 引入建立專案的彈窗元件
+import CreateProjectModal from '@/components/CreateProjectModal';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -18,6 +20,9 @@ export default function DashboardPage() {
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [currentUserName, setCurrentUserName] = useState<string>('');
+
+  // 🚀 控制彈窗開啟與關閉的狀態
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -99,11 +104,18 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans relative">
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
         <h1 className="text-lg font-black text-slate-900 tracking-tight">智金處專案總覽</h1>
         <div className="flex items-center gap-4">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#3B82F6] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-600"><Plus className="w-4 h-4" /> New REQ</button>
+          {/* 🚀 修改按鈕名稱與點擊事件 */}
+          <button 
+            onClick={() => setIsCreateModalOpen(true)} 
+            className="flex items-center gap-2 px-4 py-2 bg-[#3B82F6] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-600 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> 建立案件
+          </button>
+          
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
             {currentUserId ? (
               <div className="flex items-center gap-3">
@@ -183,6 +195,13 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      
+      {/* 🚀 埋入彈窗元件，成功後跳轉 */}
+      <CreateProjectModal 
+        isOpen={isCreateModalOpen} 
+        onClose={() => setIsCreateModalOpen(false)} 
+        onSuccess={(projectId) => router.push(`/project/${projectId}`)} 
+      />
     </div>
   );
 }

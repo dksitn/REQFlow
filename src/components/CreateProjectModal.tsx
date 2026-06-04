@@ -1,130 +1,149 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/core/client/supabase';
 import { X, Loader2, FolderPlus } from 'lucide-react';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
-  managerId: string | null;
-  managerName: string | null; // 🚀 接收使用者的真實姓名
+  onSuccess: (projectId: string) => void;
 }
 
-export default function CreateProjectModal({ isOpen, onClose, onSuccess, managerId, managerName }: CreateProjectModalProps) {
+export default function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProjectModalProps) {
   const [name, setName] = useState('');
-  const [department, setDepartment] = useState('數位金融處');
+  const [department, setDepartment] = useState('');
+  const [units, setUnits] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // 當彈窗打開時，去資料庫抓取單位清單供下拉選單使用
+  useEffect(() => {
+    if (isOpen) {
+      const fetchUnits = async () => {
+        const { data } = await supabase.from('core_units').select('*').order('created_at');
+        if (data) setUnits(data);
+      };
+      fetchUnits();
+    } else {
+      // 關閉時清空表單
+      setName('');
+      setDepartment('');
+      setErrorMsg('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!managerId) {
-      setErrorMsg('無法取得您的身分，請重新登入。');
+    if (!name.trim()) {
+      setErrorMsg('請輸入專案名稱');
       return;
     }
-
+    
     setIsLoading(true);
     setErrorMsg('');
 
     try {
-      // 1. 取得初始狀態「需求單位討論」的 status_id
-      const { data: statusObj } = await supabase
-        .from('m01_project_status_options')
-        .select('status_id')
-        .eq('status_code', 'REQ_UNIT_DISCUSSION')
-        .single();
+      // 🤖 自動產生具有企業感的專案編號 (例如: REQ-2026-0604-001)
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mmdd = String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+      const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      const projectCode = `REQ-${yyyy}-${mmdd}-${randomNum}`;
 
-      const projectCode = `REQ-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-
-      // 2. 寫入專案主檔 (m01_projects)
-      const { data: newProject, error: projectError } = await supabase
+      // 將基本資料寫入專案主表，並設定預設狀態為「需求單位討論」
+      const { data, error } = await supabase
         .from('m01_projects')
-        .insert([{
+        .insert({
+          name: name.trim(),
           project_code: projectCode,
-          name: name,
-          department: department,
-          status_id: statusObj?.status_id || null,
-          status_name_snapshot: '需求單位討論',
-          project_type: '評估案',
-          completion_rate: 15,
-          risk_level: '低'
-        }])
+          department: department || null,
+          status_name_snapshot: '需求單位討論', 
+          confirmed_fields: {} 
+        })
         .select()
         .single();
 
-      if (projectError) throw projectError;
-
-      // 3. 🚀 寫入負責人關聯表 (m01_project_responsibles) - 符合 v1.3 規格
-      if (newProject) {
-        const { error: responsibleError } = await supabase
-          .from('m01_project_responsibles')
-          .insert([{
-            project_id: newProject.id,
-            user_id: managerId,
-            responsible_name_snapshot: managerName || 'Admin',
-            section_name_snapshot: '應用科', // 預設帶入
-            responsibility_role: '主責'
-          }]);
-        
-        if (responsibleError) console.error('寫入負責人失敗:', responsibleError);
+      if (error) throw error;
+      
+      if (data) {
+        onSuccess(data.id); // 將新建的 ID 傳出，供父層跳轉使用
       }
-
-      setName('');
-      onSuccess();
-      onClose();
-    } catch (error: any) {
-      console.error('新增專案失敗:', error);
-      setErrorMsg(error.message || '寫入資料庫時發生錯誤');
+    } catch (err: any) {
+      console.error('建立專案失敗:', err);
+      setErrorMsg(`建立失敗：${err.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
               <FolderPlus className="w-4 h-4" />
             </div>
-            <h2 className="text-base font-bold text-slate-800">建立新專案 (REQ)</h2>
+            <h2 className="text-base font-extrabold text-slate-800">建立新案件</h2>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button onClick={onClose} disabled={isLoading} className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5">
           {errorMsg && (
-            <div className="p-3 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg">{errorMsg}</div>
+            <div className="p-3 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg">
+              {errorMsg}
+            </div>
           )}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700">專案名稱 <span className="text-rose-500">*</span></label>
+          
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1.5">專案名稱 <span className="text-rose-500">*</span></label>
             <input 
-              type="text" required value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="例如：AI 智能客服轉型評估"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+              type="text" 
+              required
+              autoFocus
+              placeholder="例如：全通路會員智能推薦系統..." 
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all disabled:opacity-50"
             />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700">提出單位 <span className="text-rose-500">*</span></label>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1.5">提案單位 (可選)</label>
             <select 
-              value={department} onChange={(e) => setDepartment(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all disabled:opacity-50 cursor-pointer appearance-none"
             >
-              <option value="數位金融處">數位金融處</option>
-              <option value="作業服務總部">作業服務總部</option>
-              <option value="資訊總部">資訊總部</option>
+              <option value="" className="text-slate-400">請選擇單位...</option>
+              {units.map(u => (
+                <option key={u.id} value={u.name}>{u.name}</option>
+              ))}
             </select>
           </div>
-          <div className="pt-4 flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">取消</button>
-            <button type="submit" disabled={isLoading} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-all disabled:opacity-70">
+
+          <div className="pt-2 flex gap-3">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              disabled={isLoading}
+              className="flex-1 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              取消
+            </button>
+            <button 
+              type="submit" 
+              disabled={isLoading || !name.trim()}
+              className="flex-1 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '確認建立'}
             </button>
           </div>
