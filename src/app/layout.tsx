@@ -4,6 +4,8 @@ import './globals.css';
 import AuthWidget from '@/components/AuthWidget';
 import Link from 'next/link';
 import { FolderKanban, LayoutDashboard, Settings } from 'lucide-react';
+// 🚀 引入我們剛寫好的全域守衛
+import AuthGuard from '@/components/AuthGuard';
 
 // ----------------------------------------------------------------------
 // 🔍 1. Google SEO 與社群分享標籤 (Meta Tags & Open Graph)
@@ -74,15 +76,14 @@ export default function RootLayout({
               我的負責案件
             </Link>
             
-            {/* 🚀 正式開啟：權限管理 (指向 /admin) */}
+            {/* 權限管理 (指向 /admin) */}
             <Link href="/admin" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors">
               <Settings className="w-4 h-4" />
               權限管理
             </Link>
           </div>
 
-          {/* 🔐 完美閉環：將 R6 製作的全域身分守衛與登出小工具放在最底部 
-          */}
+          {/* 🔐 將 AuthWidget 放在最底部，訪客永遠看得到它以便登入 */}
           <AuthWidget />
         </nav>
 
@@ -90,7 +91,10 @@ export default function RootLayout({
           使用 <main> 標籤，告訴搜尋引擎這是網頁的最核心內容 
         */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-          {children}
+          {/* 🛡️ 路由守衛包覆：只保護主要內容區域，未登入者只會看到鎖定畫面 */}
+          <AuthGuard>
+            {children}
+          </AuthGuard>
         </main>
 
       </body>
