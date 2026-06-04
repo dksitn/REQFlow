@@ -6,7 +6,6 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
 import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, Plus, ChevronRight, LogOut, User as UserIcon } from 'lucide-react';
-// 🚀 引入建立專案的彈窗元件
 import CreateProjectModal from '@/components/CreateProjectModal';
 
 export default function MyProjectsPage() {
@@ -21,7 +20,6 @@ export default function MyProjectsPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [currentUserName, setCurrentUserName] = useState<string>('');
 
-  // 🚀 控制彈窗開啟與關閉的狀態
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
@@ -46,7 +44,13 @@ export default function MyProjectsPage() {
         const myFilteredProjects = (data || []).filter(p => {
           if (!searchName) return false; 
           const team = p.team_members || {};
-          const allMembers = [...(team['應用科']||[]), ...(team['企劃科']||[]), ...(team['科技科']||[])].map(m => m.trim());
+          // 🚀 關鍵修改：將「唯讀檢視者」也納入負責人名單陣列中進行比對
+          const allMembers = [
+            ...(team['應用科']||[]), 
+            ...(team['企劃科']||[]), 
+            ...(team['科技科']||[]), 
+            ...(team['唯讀檢視者']||[])
+          ].map(m => m.trim());
           return allMembers.includes(searchName);
         });
 
@@ -93,7 +97,13 @@ export default function MyProjectsPage() {
 
   const getResponsiblesString = (proj: any) => {
     const team = proj.team_members || {};
-    const all = [...(team['應用科']||[]), ...(team['企劃科']||[]), ...(team['科技科']||[])];
+    // 🚀 同樣在顯示畫面上，顯示出唯讀檢視者
+    const all = [
+      ...(team['應用科']||[]), 
+      ...(team['企劃科']||[]), 
+      ...(team['科技科']||[]), 
+      ...(team['唯讀檢視者']||[])
+    ];
     return all.length > 0 ? all.join(', ') : '未指定';
   };
 
@@ -123,18 +133,12 @@ export default function MyProjectsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans relative">
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+    // 🚀 拉桿修復：外層鎖死 h-screen，內層使用 overflow-y-auto
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans relative h-screen overflow-hidden">
+      <div className="shrink-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
         <h1 className="text-lg font-black text-slate-900 tracking-tight">我的負責案件</h1>
         <div className="flex items-center gap-4">
-          {/* 🚀 修改按鈕名稱與點擊事件 */}
-          <button 
-            onClick={() => setIsCreateModalOpen(true)} 
-            className="flex items-center gap-2 px-4 py-2 bg-[#3B82F6] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> 建立案件
-          </button>
-          
+          <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-[#3B82F6] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-600 transition-colors"><Plus className="w-4 h-4" /> 建立案件</button>
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
             {currentUserId ? (
               <div className="flex items-center gap-3">
@@ -147,97 +151,102 @@ export default function MyProjectsPage() {
         </div>
       </div>
 
-      <div className="px-8 pt-8 pb-12 max-w-[1600px] mx-auto w-full flex-1 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-8 items-start h-full">
-        <div className="flex flex-col gap-6 min-w-0 h-full">
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 cursor-pointer select-none shrink-0">
-            <div onClick={() => setActiveFilter('ALL')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'ALL' ? 'ring-2 ring-blue-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-blue-200'}`}>
-              <div><p className="text-[11px] font-bold text-slate-400 mb-1">專案總數</p><p className="text-3xl font-black text-slate-900">{totalMyProjects}</p></div>
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#3B82F6] flex justify-center items-center"><Folder className="w-5 h-5" /></div>
+      {/* 🚀 拉桿修復：給這層加上 overflow-y-auto */}
+      <div className="flex-1 overflow-y-auto px-8 pt-8 pb-12 w-full custom-scrollbar">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-8 items-start h-full">
+          <div className="flex flex-col gap-6 min-w-0 h-full">
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 cursor-pointer select-none shrink-0">
+              <div onClick={() => setActiveFilter('ALL')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'ALL' ? 'ring-2 ring-blue-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-blue-200'}`}>
+                <div><p className="text-[11px] font-bold text-slate-400 mb-1">專案總數</p><p className="text-3xl font-black text-slate-900">{totalMyProjects}</p></div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#3B82F6] flex justify-center items-center"><Folder className="w-5 h-5" /></div>
+              </div>
+              <div onClick={() => setActiveFilter('EVAL')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'EVAL' ? 'ring-2 ring-emerald-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-emerald-200'}`}>
+                <div><p className="text-[11px] font-bold text-slate-400 mb-1">評估案</p><p className="text-3xl font-black text-[#10B981]">{evalCount}</p></div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#10B981] flex justify-center items-center"><CheckSquare className="w-5 h-5" /></div>
+              </div>
+              <div onClick={() => setActiveFilter('POC')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'POC' ? 'ring-2 ring-purple-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-purple-200'}`}>
+                <div><p className="text-[11px] font-bold text-slate-400 mb-1">POC案</p><p className="text-3xl font-black text-[#A855F7]">{pocCount}</p></div>
+                <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#A855F7] flex justify-center items-center"><FlaskConical className="w-5 h-5" /></div>
+              </div>
+              <div onClick={() => setActiveFilter('PENDING')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'PENDING' ? 'ring-2 ring-amber-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-amber-200'}`}>
+                <div><p className="text-[11px] font-bold text-slate-400 mb-1">暫緩案</p><p className="text-3xl font-black text-[#F59E0B]">{pendingCount}</p></div>
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#F59E0B] flex justify-center items-center"><Hourglass className="w-5 h-5" /></div>
+              </div>
             </div>
-            <div onClick={() => setActiveFilter('EVAL')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'EVAL' ? 'ring-2 ring-emerald-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-emerald-200'}`}>
-              <div><p className="text-[11px] font-bold text-slate-400 mb-1">評估案</p><p className="text-3xl font-black text-[#10B981]">{evalCount}</p></div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#10B981] flex justify-center items-center"><CheckSquare className="w-5 h-5" /></div>
-            </div>
-            <div onClick={() => setActiveFilter('POC')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'POC' ? 'ring-2 ring-purple-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-purple-200'}`}>
-              <div><p className="text-[11px] font-bold text-slate-400 mb-1">POC案</p><p className="text-3xl font-black text-[#A855F7]">{pocCount}</p></div>
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#A855F7] flex justify-center items-center"><FlaskConical className="w-5 h-5" /></div>
-            </div>
-            <div onClick={() => setActiveFilter('PENDING')} className={`bg-white rounded-2xl p-5 shadow-sm flex justify-between transition-all ${activeFilter === 'PENDING' ? 'ring-2 ring-amber-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-amber-200'}`}>
-              <div><p className="text-[11px] font-bold text-slate-400 mb-1">暫緩案</p><p className="text-3xl font-black text-[#F59E0B]">{pendingCount}</p></div>
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#F59E0B] flex justify-center items-center"><Hourglass className="w-5 h-5" /></div>
+
+            {/* 🚀 內部表格區塊的拉桿修復 */}
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col flex-1 min-h-[400px]">
+              <div className="p-6 border-b border-slate-50 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-black text-slate-800">
+                    {activeFilter === 'STALE' ? '待更新專案' : activeFilter === 'INCOMPLETE' ? '資料未齊全' : activeFilter === 'ALL' ? '全部專案' : activeFilter === 'EVAL' ? '評估案' : activeFilter === 'POC' ? 'POC案' : '暫緩案'}
+                  </h2>
+                  <span className="text-sm font-bold text-slate-400">(共 {finalFilteredProjects.length} 筆)</span>
+                </div>
+                <div className="relative w-64"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" placeholder="搜尋專案..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500" /></div>
+              </div>
+
+              <div className="overflow-auto flex-1 custom-scrollbar">
+                <table className="w-full text-left border-collapse whitespace-nowrap">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="border-b-2 border-slate-100 bg-white">
+                      <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">編號</th>
+                      <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">名稱</th>
+                      <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">狀態</th>
+                      <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">負責人</th>
+                      <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase w-32">完整度</th>
+                      <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase text-center">風險(可選)</th>
+                      <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">最後更新</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {isLoading ? <tr><td colSpan={7} className="py-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></td></tr> : 
+                      finalFilteredProjects.map((proj) => {
+                        const comp = calculateCompleteness(proj);
+                        return (
+                          <tr key={proj.id} onDoubleClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-blue-50/50 cursor-pointer">
+                            <td className="px-6 py-4 text-xs font-bold text-slate-500">{proj.project_code}</td>
+                            <td className="px-4 py-4 text-sm font-black text-slate-800">{proj.name || proj.project_name}</td>
+                            <td className="px-4 py-4 text-xs font-black text-[#3B82F6]">{proj.status_name_snapshot || '未立案'}</td>
+                            <td className="px-4 py-4 text-xs font-bold text-slate-700 truncate max-w-[150px]">{getResponsiblesString(proj)}</td>
+                            <td className="px-4 py-4"><div className="flex items-center gap-2"><div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex-1"><div className="h-full bg-[#3B82F6] rounded-full" style={{ width: `${comp}%` }} /></div><span className="text-[10px] font-black text-slate-600">{comp}%</span></div></td>
+                            <td className="px-4 py-4 text-center">{getRiskSelector(proj)}</td>
+                            <td className="px-6 py-4 text-xs font-bold text-slate-400 font-mono">{formatDate(proj.updated_at || proj.created_at, true)}</td>
+                          </tr>
+                        );
+                      })
+                    }
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden" style={{ maxHeight: 'calc(100vh - 250px)' }}>
-            <div className="p-6 border-b border-slate-50 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-black text-slate-800">
-                  {activeFilter === 'STALE' ? '待更新專案' : activeFilter === 'INCOMPLETE' ? '資料未齊全' : activeFilter === 'ALL' ? '全部專案' : activeFilter === 'EVAL' ? '評估案' : activeFilter === 'POC' ? 'POC案' : '暫緩案'}
-                </h2>
-                <span className="text-sm font-bold text-slate-400">(共 {finalFilteredProjects.length} 筆)</span>
+          <div className="flex flex-col gap-8 w-full sticky top-8">
+            <section>
+              <h3 className="text-sm font-black text-slate-800 mb-4 px-1">我的待辦事項</h3>
+              <div className="flex flex-col gap-2.5 select-none">
+                <div onClick={() => setActiveFilter(activeFilter === 'STALE' ? 'ALL' : 'STALE')} className={`flex justify-between p-3.5 rounded-xl shadow-sm border cursor-pointer transition-all group ${activeFilter === 'STALE' ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-500/20' : 'bg-white border-slate-100 hover:border-orange-200'}`}>
+                  <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600">待更新 <span className="text-slate-400">(超3天)</span></span></div>
+                  <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
+                </div>
+                <div onClick={() => setActiveFilter(activeFilter === 'INCOMPLETE' ? 'ALL' : 'INCOMPLETE')} className={`flex justify-between p-3.5 rounded-xl shadow-sm border cursor-pointer transition-all group ${activeFilter === 'INCOMPLETE' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-500/20' : 'bg-white border-slate-100 hover:border-blue-200'}`}>
+                  <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0"><Folder className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">待補資料 <span className="text-slate-400">(&lt;100%)</span></span></div>
+                  <div className="flex items-center gap-2 text-xs font-black text-slate-700">{incompleteCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
+                </div>
               </div>
-              <div className="relative w-64"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" placeholder="搜尋專案..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-blue-500" /></div>
-            </div>
-
-            <div className="overflow-auto flex-1 custom-scrollbar">
-              <table className="w-full text-left border-collapse whitespace-nowrap">
-                <thead className="sticky top-0 z-10">
-                  <tr className="border-b-2 border-slate-100 bg-white">
-                    <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">編號</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">名稱</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">狀態</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">負責人</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase w-32">完整度</th>
-                    <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase text-center">風險(可選)</th>
-                    <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">最後更新</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {isLoading ? <tr><td colSpan={7} className="py-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></td></tr> : 
-                    finalFilteredProjects.map((proj) => {
-                      const comp = calculateCompleteness(proj);
-                      return (
-                        <tr key={proj.id} onDoubleClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-blue-50/50 cursor-pointer">
-                          <td className="px-6 py-4 text-xs font-bold text-slate-500">{proj.project_code}</td>
-                          <td className="px-4 py-4 text-sm font-black text-slate-800">{proj.name || proj.project_name}</td>
-                          <td className="px-4 py-4 text-xs font-black text-[#3B82F6]">{proj.status_name_snapshot || '未立案'}</td>
-                          <td className="px-4 py-4 text-xs font-bold text-slate-700 truncate max-w-[150px]">{getResponsiblesString(proj)}</td>
-                          <td className="px-4 py-4"><div className="flex items-center gap-2"><div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex-1"><div className="h-full bg-[#3B82F6] rounded-full" style={{ width: `${comp}%` }} /></div><span className="text-[10px] font-black text-slate-600">{comp}%</span></div></td>
-                          <td className="px-4 py-4 text-center">{getRiskSelector(proj)}</td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-400 font-mono">{formatDate(proj.updated_at || proj.created_at, true)}</td>
-                        </tr>
-                      );
-                    })
-                  }
-                </tbody>
-              </table>
-            </div>
+            </section>
           </div>
-        </div>
-
-        <div className="flex flex-col gap-8 w-full sticky top-8">
-          <section>
-            <h3 className="text-sm font-black text-slate-800 mb-4 px-1">我的待辦事項</h3>
-            <div className="flex flex-col gap-2.5 select-none">
-              <div onClick={() => setActiveFilter(activeFilter === 'STALE' ? 'ALL' : 'STALE')} className={`flex justify-between p-3.5 rounded-xl shadow-sm border cursor-pointer transition-all group ${activeFilter === 'STALE' ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-500/20' : 'bg-white border-slate-100 hover:border-orange-200'}`}>
-                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600">待更新 <span className="text-slate-400">(超3天)</span></span></div>
-                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
-              </div>
-              <div onClick={() => setActiveFilter(activeFilter === 'INCOMPLETE' ? 'ALL' : 'INCOMPLETE')} className={`flex justify-between p-3.5 rounded-xl shadow-sm border cursor-pointer transition-all group ${activeFilter === 'INCOMPLETE' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-500/20' : 'bg-white border-slate-100 hover:border-blue-200'}`}>
-                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0"><Folder className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">待補資料 <span className="text-slate-400">(&lt;100%)</span></span></div>
-                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{incompleteCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
-              </div>
-            </div>
-          </section>
         </div>
       </div>
       
-      {/* 🚀 埋入彈窗元件，成功後跳轉 */}
       <CreateProjectModal 
         isOpen={isCreateModalOpen} 
         onClose={() => setIsCreateModalOpen(false)} 
         onSuccess={(projectId) => router.push(`/project/${projectId}`)} 
+        managerId={currentUserId}
+        managerName={currentUserName}
       />
     </div>
   );
