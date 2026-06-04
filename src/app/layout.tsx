@@ -4,7 +4,6 @@ import './globals.css';
 import AuthWidget from '@/components/AuthWidget';
 import Link from 'next/link';
 import { FolderKanban, LayoutDashboard, Settings } from 'lucide-react';
-// 🚀 引入我們剛寫好的全域守衛
 import AuthGuard from '@/components/AuthGuard';
 
 // ----------------------------------------------------------------------
@@ -12,8 +11,8 @@ import AuthGuard from '@/components/AuthGuard';
 // ----------------------------------------------------------------------
 export const metadata: Metadata = {
   title: {
-    template: '%s | REQFlow 企業級專案管理', // 子頁面會自動替換 %s
-    default: 'REQFlow | 智金處專案架構與資源列管平台', // 首頁預設標題
+    template: '%s | REQFlow 企業級專案管理', 
+    default: 'REQFlow | 智金處專案架構與資源列管平台', 
   },
   description: '專為智金處打造的高效專案架構、資源列管與需求評估系統。支援動態架構圖、雙向追蹤與權限隔離。',
   keywords: ['專案管理', '系統架構', '需求評估', 'SaaS', '智金處'],
@@ -25,7 +24,7 @@ export const metadata: Metadata = {
     locale: 'zh_TW',
   },
   robots: {
-    index: true, // 允許 Google 爬蟲收錄
+    index: true, 
     follow: true,
   },
 };
@@ -33,7 +32,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1, // 防止手機端輸入框意外放大
+  maximumScale: 1, 
 };
 
 const inter = Inter({ subsets: ['latin'] });
@@ -47,13 +46,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // 🏷️ 語意化 HTML：宣告語言有助於 SEO 與無障礙閱讀器
     <html lang="zh-TW">
       <body className={`${inter.className} bg-slate-50 text-slate-900 antialiased h-screen flex overflow-hidden`}>
         
-        {/* 🖥️ 全站左側導覽列 (Global Sidebar) 
-          使用 <nav> 標籤，明確告訴 Google 這是網站導航區域
-        */}
+        {/* 🖥️ 全站左側導覽列 (Global Sidebar) */}
         <nav className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm shrink-0">
           {/* Logo 區塊 */}
           <div className="h-16 flex items-center px-6 border-b border-slate-100">
@@ -88,10 +84,9 @@ export default function RootLayout({
         </nav>
 
         {/* 📄 核心內容區塊 (Main Content)
-          使用 <main> 標籤，告訴搜尋引擎這是網頁的最核心內容 
+          🚀 關鍵修復：將 overflow-hidden 改為 overflow-y-auto，釋放拉桿封印！ 
         */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-          {/* 🛡️ 路由守衛包覆：只保護主要內容區域，未登入者只會看到鎖定畫面 */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative custom-scrollbar">
           <AuthGuard>
             {children}
           </AuthGuard>
