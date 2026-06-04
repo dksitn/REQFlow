@@ -206,7 +206,7 @@ function EditableCard({
 }
 
 // ==========================================
-// 🚀 元件 2：單位選擇彈窗 (直覺選取 + 新增功能)
+// 🚀 元件 2：單位選擇彈窗
 // ==========================================
 const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   const [departments, setDepartments] = useState<any[]>([]);
@@ -216,50 +216,42 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   const [newDeptName, setNewDeptName] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
   
-  const fetchDepts = async () => {
-    setIsLoading(true);
-    setFetchError(null);
-    try {
-      const { data, error } = await supabase.from('core_units').select('*').order('created_at');
-      
-      if (error) {
-        console.error('讀取單位失敗:', error);
-        setFetchError(error.message);
-        setDepartments([]);
-      } else if (data && data.length > 0) {
-        setDepartments(data);
-      } else {
-        const defaultDepts = [
-          { id: '1', name: '智能金融處' },
-          { id: '2', name: '資訊處' },
-          { id: '3', name: '消金處' }
-        ];
-        setDepartments(defaultDepts);
+  useEffect(() => {
+    const fetchDepts = async () => {
+      setIsLoading(true);
+      setFetchError(null);
+      try {
+        const { data, error } = await supabase.from('core_units').select('*').order('created_at');
+        if (error) {
+          setFetchError(error.message);
+          setDepartments([]);
+        } else if (data && data.length > 0) {
+          setDepartments(data);
+        } else {
+          const defaultDepts = [{ id: '1', name: '智能金融處' }, { id: '2', name: '資訊處' }, { id: '3', name: '消金處' }];
+          setDepartments(defaultDepts);
+        }
+      } catch (err: any) {
+          setFetchError(err.message || '未知錯誤');
+          setDepartments([]);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err: any) {
-        console.error('執行 fetchDepts 發生例外:', err);
-        setFetchError(err.message || '未知錯誤');
-        setDepartments([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  useEffect(() => { fetchDepts(); }, []);
+    };
+    fetchDepts(); 
+  }, []);
 
   const handleAddDept = async () => {
     if(!newDeptName.trim()) return;
     setIsAdding(true);
     try {
       const { error } = await supabase.from('core_units').insert({ name: newDeptName.trim() });
-      if (error) {
-        alert(`❌ 新增失敗：\n${error.message}\n(請確認快取重載是否成功執行)`);
-        throw error;
-      }
+      if (error) throw error;
       const addedName = newDeptName.trim();
       setNewDeptName(''); 
       setSelected(addedName);
-      await fetchDepts(); 
+      const { data } = await supabase.from('core_units').select('*').order('created_at');
+      if (data) setDepartments(data);
     } catch (error) {
       console.error('新增單位錯誤:', error);
     } finally {
@@ -270,75 +262,37 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
-        
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/50">
           <h2 className="text-base font-extrabold text-slate-800">選擇所屬單位</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
         </div>
-
-        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-2 custom-scrollbar">
+        <div className="p-4 flex-1 overflow-y-auto bg-white space-y-2">
           <div className="text-[10px] font-bold text-slate-400 mb-2 px-1">點擊選擇現有單位：</div>
           {isLoading ? (
             <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
           ) : fetchError ? (
-            <div className="text-center py-6 text-xs font-bold text-rose-500 bg-rose-50 rounded-lg p-3">
-              讀取失敗: {fetchError}<br/>
-            </div>
+            <div className="text-center py-6 text-xs font-bold text-rose-500 bg-rose-50 rounded-lg p-3">讀取失敗: {fetchError}</div>
           ) : departments.length === 0 ? (
             <div className="text-center py-6 text-xs font-bold text-slate-400 bg-slate-50 rounded-lg">目前無單位，請在下方新增</div>
           ) : (
             departments.map(dept => (
-              <div 
-                key={dept.id} 
-                onClick={() => setSelected(dept.name)} 
-                className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between group ${
-                  selected === dept.name 
-                  ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' 
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-slate-50'
-                }`}
-              >
-                {dept.name} 
-                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${selected === dept.name ? 'bg-blue-600 border-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>
-                  {selected === dept.name && <Check className="w-3 h-3 text-white" />}
-                </div>
+              <div key={dept.id} onClick={() => setSelected(dept.name)} className={`px-4 py-3 rounded-xl border cursor-pointer font-bold text-sm transition-all flex items-center justify-between group ${selected === dept.name ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-2 ring-blue-500/20' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-slate-50'}`}>
+                {dept.name} <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${selected === dept.name ? 'bg-blue-600 border-blue-600' : 'border-slate-300 group-hover:border-blue-400'}`}>{selected === dept.name && <Check className="w-3 h-3 text-white" />}</div>
               </div>
             ))
           )}
         </div>
-
         <div className="px-4 py-4 bg-slate-50 border-t border-b border-slate-100 flex flex-col gap-2 shrink-0">
           <div className="text-[10px] font-bold text-slate-400 px-1">如果列表中沒有，請在此新增：</div>
           <div className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="輸入新單位名稱..." 
-              value={newDeptName} 
-              onChange={(e)=>setNewDeptName(e.target.value)} 
-              onKeyDown={(e) => e.key === 'Enter' && handleAddDept()}
-              disabled={isAdding}
-              className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 transition-all font-medium" 
-            />
-            <button 
-              onClick={handleAddDept} 
-              disabled={isAdding || !newDeptName.trim()}
-              className="bg-slate-800 text-white hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center disabled:opacity-50 min-w-[70px] shadow-sm transition-colors"
-            >
-              {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : '新增'}
-            </button>
+            <input type="text" placeholder="輸入新單位名稱..." value={newDeptName} onChange={(e)=>setNewDeptName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddDept()} disabled={isAdding} className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 transition-all font-medium" />
+            <button onClick={handleAddDept} disabled={isAdding || !newDeptName.trim()} className="bg-slate-800 text-white hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center disabled:opacity-50 min-w-[70px] shadow-sm transition-colors">{isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : '新增'}</button>
           </div>
         </div>
-
         <div className="px-6 py-4 bg-white flex gap-3 shrink-0">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 bg-white rounded-xl shadow-sm hover:bg-slate-50 transition-colors">取消</button>
-          <button 
-            onClick={() => onSave(selected)} 
-            disabled={!selected}
-            className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            確認選取
-          </button>
+          <button onClick={() => onSave(selected)} disabled={!selected} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">確認選取</button>
         </div>
-
       </div>
     </div>
   );
@@ -397,18 +351,18 @@ export default function ProjectAssessmentPage() {
           setCurrentUserEmail(user.email || '');
           const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
           if (profile?.full_name) {
-             loggedInName = profile.full_name;
-             setCurrentUserName(loggedInName);
+            loggedInName = profile.full_name;
+            setCurrentUserName(loggedInName);
           }
         }
 
         const { data: projData } = await supabase.from('m01_projects').select('*').eq('id', projectId).maybeSingle();
         if (!projData) { setIsLoading(false); return; }
         
-        // 🚀 確保有「唯讀檢視者」的陣列結構
+        // 確保有「唯讀檢視者」的陣列結構
         if (!projData.team_members) projData.team_members = { '應用科': [], '企劃科': [], '科技科': [], '唯讀檢視者': [] };
         if (!projData.team_members['唯讀檢視者']) projData.team_members['唯讀檢視者'] = [];
-
+        
         setProject(projData);
 
         // 🚀 邏輯判定：如果此人的名字存在於「唯讀檢視者」陣列中，將唯讀鎖定開啟！
@@ -426,19 +380,12 @@ export default function ProjectAssessmentPage() {
             TO_BE: imgData.find(img => img.image_type === 'TO_BE') || null 
           });
         }
-      } catch (error) { 
-        console.error('讀取失敗:', error); 
-      } finally { 
-        setIsLoading(false); 
-      }
+      } catch (error) { console.error('讀取失敗:', error); } finally { setIsLoading(false); }
     }
     if (projectId) fetchData();
   }, [projectId]);
 
-  const handleSignOut = async () => { 
-    await supabase.auth.signOut(); 
-    router.push('/auth'); 
-  };
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/auth'); };
 
   const handleGlobalUnlock = async () => {
     if (isReadOnlyMember) return;
@@ -547,18 +494,14 @@ export default function ProjectAssessmentPage() {
         
         setImages(prev => ({ ...prev, [type]: data }));
         setProject((prev: any) => ({ ...prev, confirmed_fields: updatedConfirmed }));
-      } finally { 
-        setIsUploading(prev => ({ ...prev, [type]: false })); 
-        event.target.value = ''; 
-      }
+      } finally { setIsUploading(prev => ({ ...prev, [type]: false })); event.target.value = ''; }
     };
     reader.readAsDataURL(file);
   };
 
-  if (isLoading) return <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-[#F8FAFC]"><Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" /></div>;
+  if (isLoading) return <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#F8FAFC]"><Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" /></div>;
   if (!project) return <div className="p-8 font-bold text-slate-600">找不到此專案</div>;
 
-  // 🚀 加入「唯讀檢視者」的設定區塊
   const teamConfig = [
     { key: '應用科', textClass: 'text-emerald-600', bgClass: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
     { key: '企劃科', textClass: 'text-blue-600', bgClass: 'bg-blue-50 border-blue-200 text-blue-700' },
@@ -567,15 +510,15 @@ export default function ProjectAssessmentPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F8FAFC] w-full min-h-screen relative font-sans pb-24">
+    // 🚀 關鍵修復：這裡使用 absolute inset-0 搭配 overflow-y-auto 讓頁面自然出現拉桿！
+    <div className="absolute inset-0 overflow-y-auto scroll-smooth bg-[#F8FAFC] flex flex-col font-sans">
       
-      {/* 頂部導覽列 (保留 sticky 讓它黏在最上面) */}
-      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+      {/* 頂部導覽列：提高 z-index 確保往下捲動時不會被底下的圖層蓋住 */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={() => router.push('/')} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg transition-colors">
             <ArrowLeft className="w-4 h-4" /> 返回列表
           </button>
-          {/* 🚀 顯示明顯的提示標籤 */}
           {isReadOnlyMember && (
             <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-xs font-black shadow-sm">
               <Lock className="w-3.5 h-3.5" /> 唯讀模式 (禁止修改)
@@ -583,7 +526,6 @@ export default function ProjectAssessmentPage() {
           )}
         </div>
         <div className="flex items-center gap-4">
-          {/* 🚀 隱藏唯讀人員的全站解鎖按鈕 */}
           {!isReadOnlyMember && (
             <button 
               onClick={handleGlobalUnlock} 
@@ -622,20 +564,20 @@ export default function ProjectAssessmentPage() {
         </div>
       </div>
 
-      <div className="px-8 pt-8 pb-24 max-w-[1400px] mx-auto w-full flex flex-col gap-6">
+      {/* 🚀 主內容區：加上 padding bottom (pb-32) 確保最下面不會貼齊邊緣 */}
+      <div className="px-8 pt-8 pb-32 max-w-[1400px] mx-auto w-full flex flex-col gap-6 shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">個別專案綜合評估</h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 w-32">
               <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${completenessPercent}%` }}></div>
+                <div className="bg-emerald-500 h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${completenessPercent}%` }}></div>
               </div>
               <span className="text-xs font-black text-slate-600">{completenessPercent}%</span>
             </div>
           </div>
         </div>
 
-        {/* 基本資訊區塊 */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
           <div>
             <p className="text-[11px] font-bold text-slate-400 mb-2">專案編號</p>
@@ -643,7 +585,6 @@ export default function ProjectAssessmentPage() {
           </div>
           <div>
             <p className="text-[11px] font-bold text-slate-400 mb-2 flex items-center gap-1">單位</p>
-            {/* 🚀 唯讀者不可點擊變更單位 */}
             <button onClick={() => !isReadOnlyMember && setIsDeptModalOpen(true)} className={`w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl transition-all group ${isReadOnlyMember ? 'cursor-not-allowed opacity-80' : 'hover:bg-white hover:border-blue-300'}`}>
               <div className="flex items-center gap-2">
                 <Building2 className={`w-4 h-4 text-slate-500 ${!isReadOnlyMember && 'group-hover:text-blue-500'}`} />
@@ -658,23 +599,13 @@ export default function ProjectAssessmentPage() {
               <p className="text-[11px] font-bold text-slate-400 mb-2">專案狀態</p>
             </div>
             <div className="flex items-center gap-4">
-              {/* 🚀 唯讀者不可點擊編輯名稱 */}
               <div className={`flex-1 px-2 py-2.5 rounded-lg border border-transparent transition-colors group ${isReadOnlyMember ? 'cursor-default' : 'cursor-pointer hover:bg-slate-50 hover:border-slate-200'}`} onClick={() => { if(!isReadOnlyMember){ setNameValue(project.name); setEditingName(true); }}}>
                 {editingName ? (
-                  <input 
-                    autoFocus 
-                    value={nameValue} 
-                    onChange={e => setNameValue(e.target.value)} 
-                    onBlur={handleSaveName} 
-                    onKeyDown={e => e.key === 'Enter' && handleSaveName()} 
-                    className="w-full text-base font-black text-slate-800 border border-blue-400 rounded px-2 outline-none" 
-                    onClick={e => e.stopPropagation()} 
-                  />
+                  <input autoFocus value={nameValue} onChange={e => setNameValue(e.target.value)} onBlur={handleSaveName} onKeyDown={e => e.key === 'Enter' && handleSaveName()} className="w-full text-base font-black text-slate-800 border border-blue-400 rounded px-2 outline-none" onClick={e => e.stopPropagation()} />
                 ) : (
                   <p className={`text-base font-black text-slate-800 truncate ${!isReadOnlyMember && 'group-hover:text-blue-600'}`}>{project.name}</p>
                 )}
               </div>
-              {/* 🚀 唯讀者不可更改狀態 */}
               <button onClick={() => !isReadOnlyMember && setIsStatusModalOpen(true)} className={`flex items-center justify-between gap-4 px-4 py-2.5 bg-white border border-slate-200 rounded-xl transition-all shrink-0 ${isReadOnlyMember ? 'cursor-not-allowed opacity-80' : 'hover:bg-blue-50 hover:border-blue-300'}`}>
                 <span className="text-sm font-black text-[#3B82F6]">{project.status_name_snapshot}</span>
                 {!isReadOnlyMember && <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -683,7 +614,6 @@ export default function ProjectAssessmentPage() {
           </div>
         </div>
 
-        {/* 專案負責人 */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
           <h2 className="text-sm font-black text-slate-800 mb-4">專案負責人</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -696,12 +626,10 @@ export default function ProjectAssessmentPage() {
                      {members.map((member: string) => (
                        <span key={member} className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold shadow-sm ${team.bgClass}`}>
                          {member} 
-                         {/* 🚀 唯讀者看不到刪除 X 按鈕 */}
                          {!isReadOnlyMember && <X onClick={() => handleRemoveMemberInline(team.key, member)} className="w-3 h-3 opacity-50 hover:opacity-100 cursor-pointer" />}
                        </span>
                      ))}
                    </div>
-                   {/* 🚀 唯讀者看不到新增按鈕 */}
                    {!isReadOnlyMember && (
                     <button onClick={() => openAssigneeModal(team.key)} className="mt-2 flex items-center justify-center gap-1.5 w-full py-2 border border-dashed border-slate-300 rounded-lg text-xs font-bold text-slate-400 hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50 transition-all bg-white">
                       選擇人員 <Plus className="w-3.5 h-3.5" />
@@ -713,27 +641,23 @@ export default function ProjectAssessmentPage() {
           </div>
         </div>
 
-        {/* 第三層：2格 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <EditableCard theme="blue" title="現行工作職掌與工作流程" fieldKey="workflow_text" projectId={projectId} initialValue={project.workflow_text} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['workflow_text']} placeholder="請輸入現行工作職掌與流程說明..." isReadOnlyMember={isReadOnlyMember} />
           <EditableCard theme="rose" title="現行作業痛點" fieldKey="as_is_text" projectId={projectId} initialValue={project.as_is_text} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['as_is_text']} placeholder="請輸入現行作業遭遇的痛點..." isReadOnlyMember={isReadOnlyMember} />
         </div>
 
-        {/* 第四層：3格 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <EditableCard theme="purple" title="影響範圍－人員" fieldKey="impact_people_text" projectId={projectId} initialValue={project.impact_people_text} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['impact_people_text']} placeholder="專案影響人員、業務相關人員等..." minHeight="min-h-[180px]" isReadOnlyMember={isReadOnlyMember} />
           <EditableCard theme="orange" title="影響範圍－時間" fieldKey="impact_time_text" projectId={projectId} initialValue={project.impact_time_text} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['impact_time_text']} placeholder="預估每月可節省約多少小時..." minHeight="min-h-[180px]" isReadOnlyMember={isReadOnlyMember} />
           <EditableCard theme="teal" title="影響範圍－效益" fieldKey="impact_benefit_text" projectId={projectId} initialValue={project.impact_benefit_text} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['impact_benefit_text']} placeholder="提升需求處理效率與準確性..." minHeight="min-h-[180px]" isReadOnlyMember={isReadOnlyMember} />
         </div>
 
-        {/* 第五層：圖片區 */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
           <div className="flex items-center gap-2 mb-4">
             <FileImage className="w-4 h-4 text-blue-500" />
             <h2 className="text-sm font-black text-slate-800">AS-IS / TO-BE 系統架構對照</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* AS-IS */}
             <div className="relative border border-slate-200 rounded-xl overflow-hidden min-h-[260px] flex flex-col group bg-slate-50/50">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-700">AS-IS 現行流程圖</h3>
@@ -745,19 +669,14 @@ export default function ProjectAssessmentPage() {
               <div className="flex-1 relative flex items-center justify-center flex-col">
                 <input type="file" ref={asIsInputRef} onChange={(e) => handleImageUpload(e, 'AS_IS')} accept="image/*" className="hidden" />
                 {isUploading.AS_IS ? (
-                  <div className="flex flex-col items-center text-blue-500">
-                    <Loader2 className="w-8 h-8 animate-spin mb-2" />
-                    <span className="text-xs font-bold">上傳中...</span>
-                  </div>
+                  <div className="flex flex-col items-center text-blue-500"><Loader2 className="w-8 h-8 animate-spin mb-2" /><span className="text-xs font-bold">上傳中...</span></div>
                 ) : images.AS_IS ? (
                   <>
                     <img src={images.AS_IS.thumbnail_binary} className="w-full h-full object-cover absolute inset-0" />
                     <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm">
                       <button onClick={() => { setViewerMode('SINGLE_AS_IS'); setIsViewerOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-800 text-xs font-bold rounded-lg hover:bg-slate-100 shadow-sm"><Eye className="w-4 h-4" /> 檢視</button>
-                      {/* 🚀 唯讀者不可替換圖片 */}
                       {!isReadOnlyMember && <button onClick={() => asIsInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 text-white text-xs font-bold rounded-lg hover:bg-white/30 border border-white/30"><RefreshCw className="w-4 h-4" /> 替換</button>}
                     </div>
-                    {/* 🚀 唯讀者不可確認圖片 */}
                     {!isReadOnlyMember && !confirmedFields['image_as_is'] && (
                       <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-100 group-hover:opacity-0 transition-opacity">
                         <button onClick={() => handleConfirmField('image_as_is')} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white text-xs font-extrabold rounded-full hover:bg-emerald-600 shadow-lg animate-bounce"><CheckCircle2 className="w-4 h-4" /> 確認圖片無誤</button>
@@ -773,7 +692,6 @@ export default function ProjectAssessmentPage() {
               </div>
             </div>
             
-            {/* TO-BE */}
             <div className="relative border border-slate-200 rounded-xl overflow-hidden min-h-[260px] flex flex-col group bg-slate-50/50">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-700">TO-BE 目標架構圖</h3>
@@ -785,10 +703,7 @@ export default function ProjectAssessmentPage() {
               <div className="flex-1 relative flex items-center justify-center flex-col">
                 <input type="file" ref={toBeInputRef} onChange={(e) => handleImageUpload(e, 'TO_BE')} accept="image/*" className="hidden" />
                 {isUploading.TO_BE ? (
-                  <div className="flex flex-col items-center text-blue-500">
-                    <Loader2 className="w-8 h-8 animate-spin mb-2" />
-                    <span className="text-xs font-bold">上傳中...</span>
-                  </div>
+                  <div className="flex flex-col items-center text-blue-500"><Loader2 className="w-8 h-8 animate-spin mb-2" /><span className="text-xs font-bold">上傳中...</span></div>
                 ) : images.TO_BE ? (
                   <>
                     <img src={images.TO_BE.thumbnail_binary} className="w-full h-full object-cover absolute inset-0" />
@@ -813,15 +728,12 @@ export default function ProjectAssessmentPage() {
             
             {(images.AS_IS && images.TO_BE) && (
               <div className="col-span-1 md:col-span-2 flex justify-center mt-2">
-                <button onClick={() => { setViewerMode('DUAL'); setIsViewerOpen(true); }} className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-blue-200 text-blue-600 text-xs font-black rounded-full hover:bg-blue-50 transition-all shadow-sm">
-                  <Columns className="w-4 h-4" /> 進入雙圖對照模式
-                </button>
+                <button onClick={() => { setViewerMode('DUAL'); setIsViewerOpen(true); }} className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-blue-200 text-blue-600 text-xs font-black rounded-full hover:bg-blue-50 transition-all shadow-sm"><Columns className="w-4 h-4" /> 進入雙圖對照模式</button>
               </div>
             )}
           </div>
         </div>
 
-        {/* 第六層：4格 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <EditableCard theme="emerald" title="業務評估 (Business Evaluation)" fieldKey="eval_business" projectId={projectId} initialValue={project.eval_business} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['eval_business']} placeholder="業務價值、成本效益分析..." isReadOnlyMember={isReadOnlyMember} />
           <EditableCard theme="purple" title="技術評估 (Technical Assessment)" fieldKey="eval_technical" projectId={projectId} initialValue={project.eval_technical} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['eval_technical']} placeholder="架構設計、資安風險、技術可行性..." isReadOnlyMember={isReadOnlyMember} />
@@ -830,7 +742,6 @@ export default function ProjectAssessmentPage() {
         </div>
       </div>
 
-      {/* 以下是彈窗與預覽器區域 */}
       {isStatusModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
@@ -855,7 +766,7 @@ export default function ProjectAssessmentPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b flex justify-between bg-slate-50/50">
-              <h2 className="text-sm font-black text-slate-800">管理 {memberModalConfig.deptKey} 專案成員</h2>
+              <h2 className="text-sm font-black text-slate-800">管理 {memberModalConfig.deptKey} 成員</h2>
               <button onClick={() => setMemberModalConfig(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
             </div>
             <div className="p-5 space-y-4">
@@ -863,18 +774,16 @@ export default function ProjectAssessmentPage() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="搜尋姓名..." className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-xs font-bold focus:outline-none focus:border-indigo-400" />
               </div>
-              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                 {systemUsers.filter(u => u.full_name && u.full_name.includes(searchTerm)).map(u => {
                   const isSelected = tempSelections.includes(u.full_name);
                   return (
                     <div key={u.id} onClick={() => toggleSelection(u.full_name)} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer ${isSelected ? 'border-blue-400 bg-blue-50/50' : 'hover:bg-slate-50'}`}>
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white ${isSelected ? 'bg-blue-600' : 'bg-slate-300'}`}>{u.full_name.charAt(0)}</div>
-                        <div className="flex flex-col"><span className={`text-xs font-black ${isSelected ? 'text-blue-900' : 'text-slate-700'}`}>{u.full_name}</span><span className="text-[10px] font-bold text-slate-400">{u.email}</span></div>
+                        <div className="flex flex-col"><span className={`text-xs font-black ${isSelected ? 'text-blue-900' : 'text-slate-700'}`}>{u.full_name}</span><span className="text-[10px] font-bold text-slate-400">{u.department}</span></div>
                       </div>
-                      <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white'}`}>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
-                      </div>
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white'}`}>{isSelected && <Check className="w-3.5 h-3.5 text-white" />}</div>
                     </div>
                   );
                 })}
@@ -882,7 +791,7 @@ export default function ProjectAssessmentPage() {
             </div>
             <div className="px-5 py-4 border-t flex gap-3 bg-slate-50/50">
               <button onClick={() => setMemberModalConfig(null)} className="flex-1 py-2.5 text-xs font-bold text-slate-600 bg-white border rounded-xl hover:bg-slate-50">取消</button>
-              <button onClick={confirmAssignees} className="flex-1 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700">確認名單 ({tempSelections.length})</button>
+              <button onClick={confirmAssignees} className="flex-1 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700">確認名單</button>
             </div>
           </div>
         </div>
