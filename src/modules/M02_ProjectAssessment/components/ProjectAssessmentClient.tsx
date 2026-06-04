@@ -17,7 +17,7 @@ import {
 function EditableCard({ 
   title, fieldKey, projectId, initialValue, currentUserId, 
   onSave, onConfirm, isConfirmed, placeholder, theme = 'slate', minHeight = 'min-h-[220px]',
-  isReadOnlyMember // 🚀 接收唯讀狀態
+  isReadOnlyMember
 }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(initialValue || '');
@@ -361,7 +361,6 @@ export default function ProjectAssessmentPage() {
   if (isLoading) return <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#F8FAFC]"><Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" /></div>;
   if (!project) return <div className="p-8 font-bold text-slate-600">找不到此專案</div>;
 
-  // 🚀 將「唯讀檢視者」正式加入渲染配置中，這樣畫面上才會有那一格！
   const teamConfig = [
     { key: '應用科', textClass: 'text-emerald-600', bgClass: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
     { key: '企劃科', textClass: 'text-blue-600', bgClass: 'bg-blue-50 border-blue-200 text-blue-700' },
@@ -370,7 +369,6 @@ export default function ProjectAssessmentPage() {
   ];
 
   return (
-    // 🚀 關鍵修復：這裡使用 absolute inset-0 搭配 overflow-y-auto 讓頁面自然出現拉桿！
     <div className="absolute inset-0 overflow-y-auto bg-[#F8FAFC] flex flex-col font-sans scroll-smooth custom-scrollbar">
       
       <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm shrink-0">
@@ -547,7 +545,11 @@ export default function ProjectAssessmentPage() {
             <div className="p-5 space-y-4">
               <div className="relative"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="搜尋姓名..." className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-xs font-bold focus:outline-none focus:border-indigo-400" /></div>
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-                {systemUsers.filter(u => u.full_name && u.full_name.includes(searchTerm)).map(u => {
+                {/* 🚀 關鍵修改：在此處使用 .filter() 過濾部門！ */}
+                {systemUsers
+                  .filter(u => u.department === memberModalConfig.deptKey)
+                  .filter(u => u.full_name && u.full_name.includes(searchTerm))
+                  .map(u => {
                   const isSelected = tempSelections.includes(u.full_name);
                   return (
                     <div key={u.id} onClick={() => toggleSelection(u.full_name)} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer ${isSelected ? 'border-blue-400 bg-blue-50/50' : 'hover:bg-slate-50'}`}>
