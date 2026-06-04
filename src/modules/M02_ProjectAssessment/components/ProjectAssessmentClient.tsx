@@ -567,10 +567,10 @@ export default function ProjectAssessmentPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F8FAFC] w-full h-screen overflow-y-auto relative font-sans">
+    <div className="flex-1 flex flex-col bg-[#F8FAFC] w-full min-h-screen relative font-sans pb-24">
       
-      {/* 頂部導覽列 */}
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
+      {/* 頂部導覽列 (保留 sticky 讓它黏在最上面) */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => router.push('/')} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg transition-colors">
             <ArrowLeft className="w-4 h-4" /> 返回列表
