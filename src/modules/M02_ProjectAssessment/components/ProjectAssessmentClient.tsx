@@ -48,7 +48,7 @@ function EditableCard({
   }, [projectId, fieldKey, currentUserId]);
 
   const handleEdit = async () => {
-    if (isReadOnlyMember) return alert('您目前為唯讀權限，無法編輯。'); // 🚀 阻擋唯讀者
+    if (isReadOnlyMember) return alert('您目前為唯讀權限，無法編輯。');
     setIsLoading(true);
     try {
       if (!currentUserId) { setIsEditing(true); return; }
@@ -112,11 +112,9 @@ function EditableCard({
             {text ? text.split('\n').map((line: string, i: number) => (<React.Fragment key={i}>{line}<br/></React.Fragment>)) : <span className="text-slate-400 italic font-normal">{placeholder}</span>}
           </div>
           <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-200/50">
-            {/* 🚀 隱藏唯讀人員的編輯按鈕 */}
             {!isReadOnlyMember && (
               <button onClick={() => !isLockedByOther && !isLoading && handleEdit()} disabled={isLockedByOther} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-50"><Edit2 className="w-3.5 h-3.5" /> 點擊編輯</button>
             )}
-            {/* 🚀 隱藏唯讀人員的確認按鈕 */}
             {!isReadOnlyMember && text && !isLockedByOther && !isConfirmed && (
               <button onClick={(e) => { e.stopPropagation(); onConfirm(fieldKey); }} className="flex items-center gap-1 px-3 py-1 bg-white text-emerald-600 border border-emerald-200 shadow-sm text-[11px] font-extrabold rounded-md hover:bg-emerald-500 hover:text-white transition-all hover:-translate-y-0.5"><CheckCircle2 className="w-3.5 h-3.5" /> 確認計分</button>
             )}
@@ -173,13 +171,13 @@ const DepartmentSelector = ({ currentDept, onSave, onClose }: any) => {
         </div>
         <div className="px-4 py-4 bg-slate-50 border-t border-b border-slate-100 flex flex-col gap-2 shrink-0">
           <div className="flex gap-2">
-            <input type="text" placeholder="新增單位名稱..." value={newDeptName} onChange={(e)=>setNewDeptName(e.target.value)} disabled={isAdding} className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 transition-all font-medium" />
+            <input type="text" placeholder="新增單位名稱..." value={newDeptName} onChange={(e)=>setNewDeptName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddDept()} disabled={isAdding} className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 transition-all font-medium" />
             <button onClick={handleAddDept} disabled={isAdding || !newDeptName.trim()} className="bg-slate-800 text-white hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 transition-colors">{isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : '新增'}</button>
           </div>
         </div>
         <div className="px-6 py-4 bg-white flex gap-3 shrink-0">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border bg-white rounded-xl hover:bg-slate-50 transition-colors">取消</button>
-          <button onClick={() => onSave(selected)} disabled={!selected} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">確認選取</button>
+          <button onClick={() => onSave(selected)} disabled={!selected} className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">確認選取</button>
         </div>
       </div>
     </div>
@@ -200,12 +198,9 @@ export default function ProjectAssessmentPage() {
   const [currentUserName, setCurrentUserName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isUnlocking, setIsUnlocking] = useState(false);
-
-  // 🚀 判定當前使用者是否為「唯讀檢視者」
   const [isReadOnlyMember, setIsReadOnlyMember] = useState(false);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
 
-  // 彈窗與狀態
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
   const [memberModalConfig, setMemberModalConfig] = useState<{ isOpen: boolean, deptKey: string } | null>(null);
@@ -216,7 +211,6 @@ export default function ProjectAssessmentPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
 
-  // 圖片上傳狀態
   const [images, setImages] = useState<{ AS_IS: any; TO_BE: any }>({ AS_IS: null, TO_BE: null });
   const [isUploading, setIsUploading] = useState<{ AS_IS: boolean; TO_BE: boolean }>({ AS_IS: false, TO_BE: false });
   const asIsInputRef = useRef<HTMLInputElement>(null);
@@ -243,13 +237,11 @@ export default function ProjectAssessmentPage() {
         const { data: projData } = await supabase.from('m01_projects').select('*').eq('id', projectId).maybeSingle();
         if (!projData) { setIsLoading(false); return; }
         
-        // 🚀 確保有「唯讀檢視者」的陣列結構
         if (!projData.team_members) projData.team_members = { '應用科': [], '企劃科': [], '科技科': [], '唯讀檢視者': [] };
         if (!projData.team_members['唯讀檢視者']) projData.team_members['唯讀檢視者'] = [];
         
         setProject(projData);
 
-        // 🚀 邏輯判定：如果此人的名字存在於「唯讀檢視者」陣列中，將唯讀鎖定開啟！
         if (loggedInName && projData.team_members['唯讀檢視者'].includes(loggedInName)) {
             setIsReadOnlyMember(true);
         }
@@ -259,10 +251,7 @@ export default function ProjectAssessmentPage() {
 
         const { data: imgData } = await supabase.from('m01_project_assessment_images').select('*').eq('project_id', projectId).eq('is_current', true);
         if (imgData && imgData.length > 0) {
-          setImages({ 
-            AS_IS: imgData.find(img => img.image_type === 'AS_IS') || null, 
-            TO_BE: imgData.find(img => img.image_type === 'TO_BE') || null 
-          });
+          setImages({ AS_IS: imgData.find(img => img.image_type === 'AS_IS') || null, TO_BE: imgData.find(img => img.image_type === 'TO_BE') || null });
         }
       } catch (error) { console.error('讀取失敗:', error); } finally { setIsLoading(false); }
     }
@@ -324,7 +313,7 @@ export default function ProjectAssessmentPage() {
   };
 
   const openAssigneeModal = (dept: string) => {
-    if (isReadOnlyMember) return; // 唯讀不可指派人員
+    if (isReadOnlyMember) return;
     setTempSelections(project?.team_members[dept] || []); 
     setSearchTerm('');
     setMemberModalConfig({ isOpen: true, deptKey: dept });
@@ -372,7 +361,7 @@ export default function ProjectAssessmentPage() {
   if (isLoading) return <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#F8FAFC]"><Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" /></div>;
   if (!project) return <div className="p-8 font-bold text-slate-600">找不到此專案</div>;
 
-  // 🚀 加入「唯讀檢視者」的設定區塊
+  // 🚀 將「唯讀檢視者」正式加入渲染配置中，這樣畫面上才會有那一格！
   const teamConfig = [
     { key: '應用科', textClass: 'text-emerald-600', bgClass: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
     { key: '企劃科', textClass: 'text-blue-600', bgClass: 'bg-blue-50 border-blue-200 text-blue-700' },
@@ -384,13 +373,11 @@ export default function ProjectAssessmentPage() {
     // 🚀 關鍵修復：這裡使用 absolute inset-0 搭配 overflow-y-auto 讓頁面自然出現拉桿！
     <div className="absolute inset-0 overflow-y-auto bg-[#F8FAFC] flex flex-col font-sans scroll-smooth custom-scrollbar">
       
-      {/* 頂部導覽列：提高 z-index 確保往下捲動時不會被底下的圖層蓋住 */}
       <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={() => router.push('/')} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg transition-colors">
             <ArrowLeft className="w-4 h-4" /> 返回列表
           </button>
-          {/* 🚀 顯示明顯的提示標籤 */}
           {isReadOnlyMember && (
             <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-xs font-black shadow-sm">
               <Lock className="w-3.5 h-3.5" /> 唯讀模式 (禁止修改)
@@ -398,7 +385,6 @@ export default function ProjectAssessmentPage() {
           )}
         </div>
         <div className="flex items-center gap-4">
-          {/* 🚀 隱藏唯讀人員的全站解鎖按鈕 */}
           {!isReadOnlyMember && (
             <button onClick={handleGlobalUnlock} disabled={isUnlocking} className="flex items-center gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-lg hover:bg-rose-100 hover:border-rose-300 transition-all shadow-sm disabled:opacity-50">
               {isUnlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />} 強制解除全站鎖定
@@ -421,7 +407,6 @@ export default function ProjectAssessmentPage() {
         </div>
       </div>
 
-      {/* 🚀 主內容區：加上 padding bottom (pb-32) 確保最下面不會貼齊邊緣 */}
       <div className="px-8 pt-8 pb-32 max-w-[1400px] mx-auto w-full flex flex-col gap-6 shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">個別專案綜合評估</h1>
