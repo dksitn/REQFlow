@@ -199,8 +199,6 @@ export default function DashboardPage() {
         isOpen={isCreateModalOpen} 
         onClose={() => setIsCreateModalOpen(false)} 
         onSuccess={(projectId) => router.push(`/project/${projectId}`)} 
-        managerId={currentUserId}
-        managerName={currentUserName}
       />
     </div>
   );

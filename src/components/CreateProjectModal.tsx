@@ -7,17 +7,21 @@ import { X, Loader2, FolderPlus } from 'lucide-react';
 interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (projectId: string) => void;
+  // 確保 onSuccess 有正確接收字串參數
+  onSuccess: (projectId: string) => void; 
+  // 🚀 加上問號 (?) 變成可選屬性，這樣不論父層有沒有傳，都不會報 Type Error！
+  managerId?: string | null;
+  managerName?: string | null;
 }
 
-export default function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProjectModalProps) {
+export default function CreateProjectModal({ isOpen, onClose, onSuccess, managerId, managerName }: CreateProjectModalProps) {
   const [name, setName] = useState('');
   const [department, setDepartment] = useState('');
   const [units, setUnits] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // 當彈窗打開時，去資料庫抓取單位清單供下拉選單使用
+  // 抓取單位列表供下拉選單使用
   useEffect(() => {
     if (isOpen) {
       const fetchUnits = async () => {
@@ -46,22 +50,28 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     setErrorMsg('');
 
     try {
-      // 🤖 自動產生具有企業感的專案編號 (例如: REQ-2026-0604-001)
+      // 自動產生企業級專案編號 (REQ-YYYY-MMDD-流水號)
       const d = new Date();
       const yyyy = d.getFullYear();
       const mmdd = String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
       const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
       const projectCode = `REQ-${yyyy}-${mmdd}-${randomNum}`;
 
-      // 將基本資料寫入專案主表，並設定預設狀態為「需求單位討論」
+      // 🚀 UX 優化：如果有傳入建立者的名字，自動把他設為預設負責人 (這樣才會出現在「我的負責案件」)
+      const defaultTeamMembers = managerName 
+        ? { '應用科': [managerName], '企劃科': [], '科技科': [], '唯讀檢視者': [] } 
+        : { '應用科': [], '企劃科': [], '科技科': [], '唯讀檢視者': [] };
+
+      // 寫入資料庫
       const { data, error } = await supabase
         .from('m01_projects')
         .insert({
           name: name.trim(),
           project_code: projectCode,
           department: department || null,
-          status_name_snapshot: '需求單位討論', 
-          confirmed_fields: {} 
+          status_name_snapshot: '需求單位討論', // 初始狀態
+          confirmed_fields: {},
+          team_members: defaultTeamMembers
         })
         .select()
         .single();
@@ -69,7 +79,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
       if (error) throw error;
       
       if (data) {
-        onSuccess(data.id); // 將新建的 ID 傳出，供父層跳轉使用
+        onSuccess(data.id); // 成功建立後，回傳 ID 給父層跳轉
       }
     } catch (err: any) {
       console.error('建立專案失敗:', err);
