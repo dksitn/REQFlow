@@ -8,35 +8,37 @@ import { supabase } from '@/core/client/supabase';
 import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, Plus, ChevronRight, LogOut, User as UserIcon, Send, CheckCircle2, FileSignature } from 'lucide-react';
 import CreateProjectModal from '@/components/CreateProjectModal';
 
+// 🚀 更新圖示映射
 const iconMap: Record<string, React.ElementType> = {
   'Send': Send,
   'CheckCircle2': CheckCircle2,
   'FlaskConical': FlaskConical,
   'FileSignature': FileSignature,
   'Hourglass': Hourglass,
+  'Folder': Folder,
 };
 
-const colorMap: Record<string, { ring: string, text: string, border: string, iconText: string }> = {
-  blue: { ring: 'ring-blue-500', text: 'text-blue-600', border: 'hover:border-blue-200', iconText: 'text-blue-500' },
-  emerald: { ring: 'ring-emerald-500', text: 'text-emerald-600', border: 'hover:border-emerald-200', iconText: 'text-emerald-500' },
-  purple: { ring: 'ring-purple-500', text: 'text-purple-600', border: 'hover:border-purple-200', iconText: 'text-purple-500' },
-  orange: { ring: 'ring-orange-500', text: 'text-orange-600', border: 'hover:border-orange-200', iconText: 'text-orange-500' },
-  slate: { ring: 'ring-slate-500', text: 'text-slate-600', border: 'hover:border-slate-300', iconText: 'text-slate-500' },
+// 🚀 定義所有狀態的顏色主題
+const colorMap: Record<string, { ring: string, text: string, border: string, iconText: string, badgeBg: string, badgeText: string, badgeBorder: string }> = {
+  blue: { ring: 'ring-blue-500', text: 'text-blue-600', border: 'hover:border-blue-200', iconText: 'text-blue-500', badgeBg: 'bg-blue-50', badgeText: 'text-blue-600', badgeBorder: 'border-blue-200' },
+  emerald: { ring: 'ring-emerald-500', text: 'text-emerald-600', border: 'hover:border-emerald-200', iconText: 'text-emerald-500', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-600', badgeBorder: 'border-emerald-200' },
+  purple: { ring: 'ring-purple-500', text: 'text-purple-600', border: 'hover:border-purple-200', iconText: 'text-purple-500', badgeBg: 'bg-purple-50', badgeText: 'text-purple-600', badgeBorder: 'border-purple-200' },
+  indigo: { ring: 'ring-indigo-500', text: 'text-indigo-600', border: 'hover:border-indigo-200', iconText: 'text-indigo-500', badgeBg: 'bg-indigo-50', badgeText: 'text-indigo-600', badgeBorder: 'border-indigo-200' },
+  orange: { ring: 'ring-orange-500', text: 'text-orange-600', border: 'hover:border-orange-200', iconText: 'text-orange-500', badgeBg: 'bg-orange-50', badgeText: 'text-orange-600', badgeBorder: 'border-orange-200' },
+  slate: { ring: 'ring-slate-500', text: 'text-slate-600', border: 'hover:border-slate-300', iconText: 'text-slate-500', badgeBg: 'bg-slate-50', badgeText: 'text-slate-600', badgeBorder: 'border-slate-200' },
 };
 
 export default function MyProjectsPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
-  const [statusDict, setStatusDict] = useState<any[]>([]); // 🚀 儲存狀態字典
+  const [statusDict, setStatusDict] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
 
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [currentUserName, setCurrentUserName] = useState<string>('');
-
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
@@ -62,7 +64,6 @@ export default function MyProjectsPage() {
         if (projRes.error) throw projRes.error;
         if (statRes.error) throw statRes.error;
         
-        // 過濾自己有參與的專案
         const myData = (projRes.data || []).filter(proj => {
           if (!loggedInName) return false;
           const team = proj.team_members || {};
@@ -83,7 +84,6 @@ export default function MyProjectsPage() {
         setIsLoading(false);
       }
     }
-
     fetchMyProjectsData();
   }, []);
 
@@ -100,13 +100,30 @@ export default function MyProjectsPage() {
     return Math.round((score / 11) * 100);
   };
 
+  const handleRiskChange = async (projectId: string, newRisk: string) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, risk_level: newRisk } : p));
+    await supabase.from('m01_projects').update({ risk_level: newRisk }).eq('id', projectId);
+  };
+
+  const getRiskSelector = (proj: any) => {
+    const currentRisk = proj.risk_level || '低';
+    const bg = currentRisk === '高' ? 'bg-rose-50 text-rose-600 border-rose-200' : currentRisk === '中' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200';
+    return (
+      <select value={currentRisk} onChange={(e) => handleRiskChange(proj.id, e.target.value)} onClick={(e) => e.stopPropagation()} className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm ${bg}`}>
+        <option value="低" className="text-emerald-600">低</option>
+        <option value="中" className="text-amber-600">中</option>
+        <option value="高" className="text-rose-600">高</option>
+      </select>
+    );
+  };
+
   const getResponsiblesString = (proj: any) => {
     const team = proj.team_members || {};
     const all = [...(team['應用科']||[]), ...(team['企劃科']||[]), ...(team['科技科']||[])];
     return all.length > 0 ? all.join(', ') : '未指定';
   };
 
-  // 🚀 動態過濾邏輯
+  // 動態過濾邏輯
   let baseFilteredProjects = projects;
   if (activeFilter !== 'ALL') {
     baseFilteredProjects = projects.filter(p => p.status_name_snapshot === activeFilter);
@@ -151,41 +168,43 @@ export default function MyProjectsPage() {
         </div>
       </div>
 
-      <div className="px-4 md:px-8 pt-6 md:pt-8 pb-24 max-w-[1600px] mx-auto w-full flex-1 flex flex-col md:flex-row gap-6 md:gap-8 items-start">
-        
+      <div className="px-4 md:px-8 pt-6 md:pt-8 pb-24 max-w-[1600px] mx-auto w-full flex-1 flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
         <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
           
-          {/* 🚀 4. 動態生成統計卡片 */}
-          <div className="flex overflow-x-auto gap-3 md:gap-4 cursor-pointer select-none shrink-0 pb-2 custom-scrollbar">
+          {/* 🚀 縮小版：橫向排列的狀態統計卡片，盡可能不出現 scrollbar */}
+          <div className="flex overflow-x-auto gap-2 md:gap-3 cursor-pointer select-none shrink-0 pb-2 custom-scrollbar lg:flex-wrap xl:flex-nowrap">
             
-            {/* 固定的全部專案 */}
-            <div onClick={() => setActiveFilter('ALL')} className={`min-w-[140px] md:min-w-[180px] bg-white rounded-2xl p-4 md:p-5 shadow-sm flex flex-col items-start justify-between transition-all gap-2 ${activeFilter === 'ALL' ? 'ring-2 ring-indigo-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-indigo-200'}`}>
+            <div onClick={() => setActiveFilter('ALL')} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border ${activeFilter === 'ALL' ? 'ring-2 ring-indigo-500 border-transparent shadow-md' : 'border-slate-100 hover:border-indigo-200'}`}>
               <div className="flex justify-between w-full items-start">
-                <p className="text-[11px] font-bold text-slate-400">我的專案</p>
-                <Folder className="w-4 h-4 text-indigo-500" />
+                <p className="text-[10px] md:text-xs font-bold text-slate-500 line-clamp-2 leading-tight">全部專案</p>
+                <Folder className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-1" />
               </div>
-              <p className="text-3xl font-black text-slate-900 mt-2">{projects.length}</p>
+              <p className="text-xl md:text-2xl font-black text-slate-900 mt-1">{projects.length}</p>
             </div>
             
-            {/* 動態渲染狀態字典 */}
+            {/* 動態渲染狀態卡片 */}
             {statusDict.map((status) => {
               const count = projects.filter(p => p.status_name_snapshot === status.name).length;
               const color = colorMap[status.color_key] || colorMap['slate'];
               const IconComponent = iconMap[status.icon] || Folder;
               const isActive = activeFilter === status.name;
 
+              // 將過長名稱做簡化以節省空間
+              const displayName = status.name.replace('科技科/企劃科', '科技/企劃');
+
               return (
-                <div key={status.id} onClick={() => setActiveFilter(status.name)} className={`min-w-[140px] md:min-w-[180px] bg-white rounded-2xl p-4 md:p-5 shadow-sm flex flex-col items-start justify-between transition-all gap-2 ${isActive ? `ring-2 ${color.ring} border-transparent shadow-md` : `border border-slate-100 ${color.border}`}`}>
+                <div key={status.id} onClick={() => setActiveFilter(status.name)} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border ${isActive ? `ring-2 ${color.ring} border-transparent shadow-md` : `border-slate-100 ${color.border}`}`}>
                   <div className="flex justify-between w-full items-start">
-                    <p className="text-[11px] font-bold text-slate-400">{status.name}</p>
-                    <IconComponent className={`w-4 h-4 ${color.iconText}`} />
+                    <p className="text-[10px] md:text-xs font-bold text-slate-500 line-clamp-2 leading-tight">{displayName}</p>
+                    <IconComponent className={`w-3.5 h-3.5 ${color.iconText} shrink-0 ml-1`} />
                   </div>
-                  <p className={`text-3xl font-black mt-2 ${color.text}`}>{count}</p>
+                  <p className={`text-xl md:text-2xl font-black mt-1 ${color.text}`}>{count}</p>
                 </div>
               );
             })}
           </div>
 
+          {/* 列表與搜尋區塊 */}
           <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-[400px]">
             <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
               <div className="flex items-center gap-3">
@@ -205,17 +224,25 @@ export default function MyProjectsPage() {
               {isLoading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400"><Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-indigo-500" /><span className="text-sm font-bold">資料載入中...</span></div>
               ) : finalFilteredProjects.length === 0 ? (
-                <div className="py-20 flex flex-col items-center justify-center text-slate-400"><Folder className="w-12 h-12 mb-3 text-slate-200" /><span className="text-sm font-bold">您目前沒有負責符合條件的專案</span></div>
+                <div className="py-20 flex flex-col items-center justify-center text-slate-400"><Folder className="w-12 h-12 mb-3 text-slate-200" /><span className="text-sm font-bold">沒有符合條件的專案</span></div>
               ) : (
                 <>
+                  {/* 手機版：卡片式列表 */}
                   <div className="md:hidden flex flex-col gap-3 p-4">
                     {finalFilteredProjects.map((proj) => {
                       const comp = calculateCompleteness(proj);
+                      // 🚀 抓取該專案狀態對應的顏色
+                      const dictObj = statusDict.find(s => s.name === proj.status_name_snapshot);
+                      const badgeColor = dictObj ? colorMap[dictObj.color_key] : colorMap['slate'];
+
                       return (
                         <div key={proj.id} onClick={() => router.push(`/project/${proj.id}`)} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer">
                           <div className="flex justify-between items-start">
                             <span className="text-[10px] font-black font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{proj.project_code}</span>
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded border bg-slate-50 text-slate-600">{proj.status_name_snapshot}</span>
+                            {/* 🚀 套用動態狀態 Badge 顏色 */}
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${badgeColor?.badgeBg} ${badgeColor?.badgeText} ${badgeColor?.badgeBorder}`}>
+                              {proj.status_name_snapshot}
+                            </span>
                           </div>
                           <h3 className="text-sm font-black text-slate-800 leading-snug">{proj.name}</h3>
                         </div>
@@ -223,6 +250,7 @@ export default function MyProjectsPage() {
                     })}
                   </div>
 
+                  {/* 電腦版：表格列表 */}
                   <div className="hidden md:block overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
                       <thead className="bg-slate-50/80 sticky top-0 z-10">
@@ -233,20 +261,31 @@ export default function MyProjectsPage() {
                           <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">目前狀態</th>
                           <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">負責人</th>
                           <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase w-32">完整度</th>
+                          <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase text-center">風險</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {finalFilteredProjects.map((proj) => {
                           const comp = calculateCompleteness(proj);
                           const responsibles = getResponsiblesString(proj);
+                          // 🚀 抓取該專案狀態對應的顏色
+                          const dictObj = statusDict.find(s => s.name === proj.status_name_snapshot);
+                          const badgeColor = dictObj ? colorMap[dictObj.color_key] : colorMap['slate'];
+
                           return (
                             <tr key={proj.id} onClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-indigo-50/30 cursor-pointer">
                               <td className="px-6 py-4"><span className="text-[10px] font-black text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded border">{proj.project_code}</span></td>
                               <td className="px-4 py-4 text-sm font-black text-slate-700 truncate max-w-[250px]">{proj.name}</td>
                               <td className="px-4 py-4"><span className="text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md">{proj.department || '-'}</span></td>
-                              <td className="px-4 py-4"><span className="text-[10px] font-black px-2 py-1 rounded-md border bg-slate-50 text-slate-600">{proj.status_name_snapshot}</span></td>
+                              <td className="px-4 py-4">
+                                {/* 🚀 套用動態狀態 Badge 顏色 */}
+                                <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${badgeColor?.badgeBg} ${badgeColor?.badgeText} ${badgeColor?.badgeBorder}`}>
+                                  {proj.status_name_snapshot}
+                                </span>
+                              </td>
                               <td className="px-4 py-4"><div className="text-[11px] font-bold text-slate-500 truncate max-w-[150px]">{responsibles}</div></td>
                               <td className="px-4 py-4"><div className="flex items-center gap-2"><div className="flex-1 bg-slate-100 rounded-full h-1.5"><div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${comp}%` }}></div></div></div></td>
+                              <td className="px-4 py-4 text-center">{getRiskSelector(proj)}</td>
                             </tr>
                           );
                         })}
@@ -259,13 +298,13 @@ export default function MyProjectsPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-8 w-full md:w-72 lg:w-80 shrink-0 md:sticky md:top-8">
+        <div className="flex flex-col gap-8 w-full xl:w-72 shrink-0 xl:sticky xl:top-8">
           <section>
             <h3 className="text-sm font-black text-slate-800 mb-4 px-1">待處理事項</h3>
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all group">
-                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600">待更新 <span className="text-slate-400 font-medium">(超過3天)</span></span></div>
-                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300" /></div>
+                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600 transition-colors">待更新 <span className="text-slate-400 font-medium">(超過3天)</span></span></div>
+                <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-orange-400 transition-colors" /></div>
               </div>
             </div>
           </section>
@@ -274,13 +313,7 @@ export default function MyProjectsPage() {
       </div>
 
       {isCreateModalOpen && (
-        <CreateProjectModal
-          onClose={() => setIsCreateModalOpen(false)}
-          onSuccess={(projectId) => {
-            setIsCreateModalOpen(false);
-            router.push(`/project/${projectId}`);
-          }}
-        />
+        <CreateProjectModal onClose={() => setIsCreateModalOpen(false)} onSuccess={(projectId) => { setIsCreateModalOpen(false); router.push(`/project/${projectId}`); }} />
       )}
     </div>
   );
