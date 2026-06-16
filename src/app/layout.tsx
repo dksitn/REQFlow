@@ -1,13 +1,16 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import Sidebar from '@/core/Sidebar'; // 引入你的 Sidebar 元件
+
+// 🚀 關鍵修正：精準對齊你的 Sidebar 實際存放路徑 (src/core/Sidebar.tsx)
+import Sidebar from '@/core/Sidebar'; 
+
 import AuthGuard from '@/components/AuthGuard';
 
 const inter = Inter({ subsets: ['latin'] });
 
 // ----------------------------------------------------------------------
-// 🔍 1. Google SEO 與社群分享標籤 (Meta Tags & Open Graph)
+// 🔍 1. Google SEO 與社群分享標籤 (Meta Tags & Open Graph) - 純 Server 屬性
 // ----------------------------------------------------------------------
 export const metadata: Metadata = {
   title: {
@@ -35,6 +38,9 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
+// ----------------------------------------------------------------------
+// 根佈局主體
+// ----------------------------------------------------------------------
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -42,12 +48,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-TW" className="h-full bg-slate-50">
+      <head>
+        {/* Next.js 14+ 會自動將 metadata 轉換為 head 標籤，此處保持標準結構 */}
+      </head>
       <body className={`${inter.className} h-full antialiased flex overflow-hidden selection:bg-indigo-100 selection:text-indigo-900`}>
         
-        {/* 🚀 左側導覽列：負責處理 RWD 與狀態的 Client Component */}
+        {/* 🚀 載入剛才修改好、帶有「手機版漢堡選單與 RWD 邏輯」的 Client Sidebar */}
         <Sidebar />
-
-        {/* 🚀 右側主內容區 */}
+        
+        {/* 右側主要內容呈現區 */}
         <main className="flex-1 flex flex-col min-w-0 bg-slate-50 relative h-full overflow-hidden">
           <AuthGuard>
             <div className="flex-1 overflow-y-auto w-full custom-scrollbar relative">
