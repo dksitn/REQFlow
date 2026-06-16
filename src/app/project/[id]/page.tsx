@@ -4,11 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
 import { ArrowLeft, Save, Check, Loader2, Clock } from 'lucide-react';
-import WorkflowEditor from './components/WorkflowEditor';
-import ImpactAnalysis from './components/ImpactAnalysis';
-import ArchitectureEditor from './components/ArchitectureEditor';
-import EvaluationMatrix from './components/EvaluationMatrix';
-import PersonnelSelector from './components/PersonnelSelector';
+
+// 🚀 關鍵修正：將相對路徑 './components/...' 改為絕對路徑 '@/components/...'
+import WorkflowEditor from '@/components/WorkflowEditor';
+import ImpactAnalysis from '@/components/ImpactAnalysis';
+import ArchitectureEditor from '@/components/ArchitectureEditor';
+import EvaluationMatrix from '@/components/EvaluationMatrix';
+import PersonnelSelector from '@/components/PersonnelSelector';
 
 export default function ProjectEvaluationPage() {
   const params = useParams();
@@ -16,7 +18,7 @@ export default function ProjectEvaluationPage() {
   const projectId = params.id as string;
 
   const [projectData, setProjectData] = useState<any>(null);
-  const [statusDict, setStatusDict] = useState<any[]>([]); // 🚀 儲存從資料庫撈回來的動態狀態選項
+  const [statusDict, setStatusDict] = useState<any[]>([]); // 儲存從資料庫撈回來的狀態字典
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -24,7 +26,6 @@ export default function ProjectEvaluationPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // 🚀 同時撈取「專案資料」與「系統狀態字典」
         const [projRes, statRes] = await Promise.all([
           supabase.from('m01_projects').select('*').eq('id', projectId).single(),
           supabase.from('m01_status_dict').select('*').order('sort_order', { ascending: true })
@@ -92,7 +93,7 @@ export default function ProjectEvaluationPage() {
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col relative font-sans">
       
       {/* 🚀 頂部固定控制列 */}
-      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm gap-4">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => router.back()}
@@ -102,16 +103,16 @@ export default function ProjectEvaluationPage() {
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <span className="text-xs font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono border border-slate-200">{projectData.project_code}</span>
-              <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight">{projectData.name}</h1>
+              <span className="text-[10px] md:text-xs font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono border border-slate-200">{projectData.project_code}</span>
+              <h1 className="text-base md:text-xl font-black text-slate-900 tracking-tight line-clamp-1">{projectData.name}</h1>
             </div>
-            <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-2">
+            <p className="text-[10px] md:text-xs font-bold text-slate-400 mt-1 flex items-center gap-2">
               <Clock className="w-3.5 h-3.5" /> 最後更新：{new Date(projectData.updated_at).toLocaleString('zh-TW')}
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 w-full md:w-auto justify-end">
           {saveMessage && (
             <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 animate-in fade-in slide-in-from-right-4">
               <Check className="w-4 h-4" /> {saveMessage}
@@ -120,7 +121,7 @@ export default function ProjectEvaluationPage() {
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors active:scale-95"
+            className="flex items-center justify-center gap-2 w-full md:w-auto px-5 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors active:scale-95 shrink-0"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             儲存變更
@@ -128,12 +129,12 @@ export default function ProjectEvaluationPage() {
         </div>
       </div>
 
-      <div className="p-6 md:p-8 max-w-[1600px] mx-auto w-full flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
+      <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto w-full flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
         
         {/* 🚀 左側主內容區 */}
         <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
             <WorkflowEditor 
               value={projectData.workflow_text} 
               onChange={(val) => handleUpdateField('workflow_text', val)} 
@@ -174,7 +175,7 @@ export default function ProjectEvaluationPage() {
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-500">目前階段</label>
                 
-                {/* 🚀 動態渲染資料庫抓下來的狀態 */}
+                {/* 🚀 動態渲染資料庫撈下來的狀態字典 */}
                 <select
                   value={projectData.status_name_snapshot}
                   onChange={(e) => handleStatusChange(e.target.value)}
@@ -206,7 +207,7 @@ export default function ProjectEvaluationPage() {
             </div>
           </section>
 
-          {/* 專案人員設定 (沿用舊組件) */}
+          {/* 專案人員設定 */}
           <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
               <h3 className="text-sm font-black text-slate-800">專案負責人員</h3>
