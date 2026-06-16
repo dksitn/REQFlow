@@ -3,14 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { ArrowLeft, Save, Check, Loader2, Clock } from 'lucide-react';
-
-// 🚀 關鍵修正：將相對路徑 './components/...' 改為絕對路徑 '@/components/...'
-import WorkflowEditor from '@/components/WorkflowEditor';
-import ImpactAnalysis from '@/components/ImpactAnalysis';
-import ArchitectureEditor from '@/components/ArchitectureEditor';
-import EvaluationMatrix from '@/components/EvaluationMatrix';
-import PersonnelSelector from '@/components/PersonnelSelector';
+import { ArrowLeft, Save, Check, Loader2, Clock, CheckSquare, Server, Target, Users } from 'lucide-react';
 
 export default function ProjectEvaluationPage() {
   const params = useParams();
@@ -18,7 +11,7 @@ export default function ProjectEvaluationPage() {
   const projectId = params.id as string;
 
   const [projectData, setProjectData] = useState<any>(null);
-  const [statusDict, setStatusDict] = useState<any[]>([]); // 儲存從資料庫撈回來的狀態字典
+  const [statusDict, setStatusDict] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -92,13 +85,10 @@ export default function ProjectEvaluationPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col relative font-sans">
       
-      {/* 🚀 頂部固定控制列 */}
+      {/* 頂部固定控制列 */}
       <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm gap-4">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => router.back()}
-            className="p-2 -ml-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
-          >
+          <button onClick={() => router.back()} className="p-2 -ml-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -118,11 +108,7 @@ export default function ProjectEvaluationPage() {
               <Check className="w-4 h-4" /> {saveMessage}
             </span>
           )}
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex items-center justify-center gap-2 w-full md:w-auto px-5 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors active:scale-95 shrink-0"
-          >
+          <button onClick={handleSave} disabled={isSaving} className="flex items-center justify-center gap-2 w-full md:w-auto px-5 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors active:scale-95 shrink-0">
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             儲存變更
           </button>
@@ -131,39 +117,57 @@ export default function ProjectEvaluationPage() {
 
       <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto w-full flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
         
-        {/* 🚀 左側主內容區 */}
+        {/* 左側主內容區 */}
         <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-            <WorkflowEditor 
-              value={projectData.workflow_text} 
-              onChange={(val) => handleUpdateField('workflow_text', val)} 
-            />
-            <ImpactAnalysis 
-              people={projectData.impact_people_text}
-              time={projectData.impact_time_text}
-              benefit={projectData.impact_benefit_text}
-              onChange={(field, val) => handleUpdateField(`impact_${field}_text`, val)} 
-            />
+            {/* 流程說明區塊 (暫時用 Placeholder 取代獨立 Component) */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <CheckSquare className="w-5 h-5 text-indigo-500" />
+                <h2 className="text-base font-black text-slate-800">業務流程說明</h2>
+              </div>
+              <textarea 
+                value={projectData.workflow_text || ''} 
+                onChange={(e) => handleUpdateField('workflow_text', e.target.value)}
+                className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 resize-none"
+                placeholder="請輸入業務流程說明..."
+              />
+            </div>
+
+            {/* 影響評估區塊 */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-blue-500" />
+                <h2 className="text-base font-black text-slate-800">影響面評估</h2>
+              </div>
+              <div className="flex flex-col gap-3">
+                <input value={projectData.impact_people_text || ''} onChange={(e) => handleUpdateField('impact_people_text', e.target.value)} placeholder="影響人員..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" />
+                <input value={projectData.impact_time_text || ''} onChange={(e) => handleUpdateField('impact_time_text', e.target.value)} placeholder="影響時間..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" />
+                <textarea value={projectData.impact_benefit_text || ''} onChange={(e) => handleUpdateField('impact_benefit_text', e.target.value)} placeholder="預期效益..." className="w-full h-16 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 resize-none" />
+              </div>
+            </div>
           </div>
 
-          <ArchitectureEditor 
-            asIs={projectData.image_as_is} 
-            toBe={projectData.image_to_be} 
-            onChange={(field, val) => handleUpdateField(`image_${field}`, val)} 
-          />
-
-          <EvaluationMatrix 
-            business={projectData.eval_business}
-            technical={projectData.eval_technical}
-            kpi={projectData.eval_kpi}
-            conclusion={projectData.eval_conclusion}
-            onChange={(field, val) => handleUpdateField(`eval_${field}`, val)} 
-          />
+          {/* 架構圖區塊 */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <Server className="w-5 h-5 text-purple-500" />
+              <h2 className="text-base font-black text-slate-800">系統架構圖 (As-Is / To-Be)</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="h-48 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 font-bold text-sm">
+                目前架構圖 (As-Is) 上傳區
+              </div>
+              <div className="h-48 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 font-bold text-sm">
+                未來架構圖 (To-Be) 上傳區
+              </div>
+            </div>
+          </div>
 
         </div>
 
-        {/* 🚀 右側側邊設定區 (狀態、人員) */}
+        {/* 🚀 右側側邊設定區 (狀態管理) */}
         <div className="w-full xl:w-80 flex flex-col gap-6 shrink-0">
           
           {/* 專案狀態控制卡片 */}
@@ -174,8 +178,7 @@ export default function ProjectEvaluationPage() {
             <div className="p-5 flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-500">目前階段</label>
-                
-                {/* 🚀 動態渲染資料庫撈下來的狀態字典 */}
+                {/* 🚀 動態渲染資料庫狀態字典 */}
                 <select
                   value={projectData.status_name_snapshot}
                   onChange={(e) => handleStatusChange(e.target.value)}
@@ -185,7 +188,6 @@ export default function ProjectEvaluationPage() {
                     <option key={status.id} value={status.name}>{status.name}</option>
                   ))}
                 </select>
-
               </div>
               
               <div className="flex flex-col gap-2 mt-2">
@@ -207,16 +209,14 @@ export default function ProjectEvaluationPage() {
             </div>
           </section>
 
-          {/* 專案人員設定 */}
+          {/* 專案人員設定 (簡化版) */}
           <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+              <Users className="w-4 h-4 text-slate-500" />
               <h3 className="text-sm font-black text-slate-800">專案負責人員</h3>
             </div>
-            <div className="p-5">
-              <PersonnelSelector 
-                value={projectData.team_members || {}} 
-                onChange={(val) => handleUpdateField('team_members', val)} 
-              />
+            <div className="p-5 text-center text-xs font-bold text-slate-400 bg-slate-50/50">
+              人員設定功能載入中...
             </div>
           </section>
 
