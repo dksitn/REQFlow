@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import Sidebar from '@/app/core/Sidebar'; // 引入你的 Sidebar 元件
+import Sidebar from '@/core/Sidebar'; // 引入你的 Sidebar 元件
 import AuthGuard from '@/components/AuthGuard';
 
 const inter = Inter({ subsets: ['latin'] });
