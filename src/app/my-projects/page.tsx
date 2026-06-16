@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, Plus, ChevronRight, LogOut, User as UserIcon, BarChart2 } from 'lucide-react';
+import { Search, Loader2, Folder, Clock, CheckSquare, FlaskConical, Hourglass, Plus, ChevronRight, LogOut, User as UserIcon } from 'lucide-react';
 import CreateProjectModal from '@/components/CreateProjectModal';
 
 export default function MyProjectsPage() {
@@ -20,6 +20,7 @@ export default function MyProjectsPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [currentUserName, setCurrentUserName] = useState<string>('');
 
+  // 控制建立案件彈窗的開關
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
@@ -137,10 +138,11 @@ export default function MyProjectsPage() {
   }).length;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F8FAFC] w-full min-h-screen relative font-sans">
+    <div className="flex-1 flex flex-col w-full relative font-sans min-h-screen">
       
       {/* 🚀 頂部導覽列 (Responsive) */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm shrink-0 gap-4">
+        {/* 手機版為了避開左側漢堡按鈕，加上 ml-12 */}
         <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight ml-12 md:ml-0 flex items-center gap-2">
           <Folder className="w-5 h-5 text-indigo-500" /> 我的負責案件
         </h1>
@@ -150,7 +152,7 @@ export default function MyProjectsPage() {
             onClick={() => setIsCreateModalOpen(true)}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 transition-colors w-full md:w-auto shrink-0"
           >
-            <Plus className="w-4 h-4" /> 建立案件
+            <Plus className="w-4 h-4" /> <span className="hidden md:inline">建立案件</span>
           </button>
           
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
@@ -176,6 +178,7 @@ export default function MyProjectsPage() {
 
       <div className="px-4 md:px-8 pt-6 md:pt-8 pb-24 max-w-[1600px] mx-auto w-full flex-1 flex flex-col md:flex-row gap-6 md:gap-8 items-start">
         
+        {/* 左側主要內容區塊 */}
         <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
           
           {/* 統計卡片區域 */}
@@ -213,9 +216,7 @@ export default function MyProjectsPage() {
             </div>
           </div>
 
-          {/* 主要內容區塊 (搜尋列與專案列表) */}
           <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-[400px]">
-            
             <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
               <div className="flex items-center gap-3">
                 <h2 className="text-base md:text-lg font-black text-slate-800">
@@ -257,7 +258,7 @@ export default function MyProjectsPage() {
                         <div 
                           key={proj.id}
                           onClick={() => router.push(`/project/${proj.id}`)}
-                          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 active:scale-[0.98] transition-transform"
+                          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 active:scale-[0.98] transition-transform cursor-pointer"
                         >
                           <div className="flex justify-between items-start">
                             <span className="text-[10px] font-black font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{proj.project_code}</span>
@@ -287,7 +288,7 @@ export default function MyProjectsPage() {
                   {/* 💻 電腦版：表格列表 */}
                   <div className="hidden md:block overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
-                      <thead className="bg-slate-50/80 sticky top-0">
+                      <thead className="bg-slate-50/80 sticky top-0 z-10">
                         <tr className="border-b-2 border-slate-100">
                           <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">專案編號</th>
                           <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">專案名稱</th>
@@ -339,13 +340,13 @@ export default function MyProjectsPage() {
           </div>
         </div>
 
-        {/* 右側：待處理事項側邊欄 */}
+        {/* 右側：待處理事項側邊欄 (Desktop 在右側，Mobile 在底部) */}
         <div className="flex flex-col gap-8 w-full md:w-72 lg:w-80 shrink-0 md:sticky md:top-8">
           <section>
             <h3 className="text-sm font-black text-slate-800 mb-4 px-1">待處理事項</h3>
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all group">
-                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600 transition-colors">待更新 <span className="text-slate-400 font-medium">(超過3工作天)</span></span></div>
+                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600 transition-colors">待更新 <span className="text-slate-400 font-medium">(超過3天)</span></span></div>
                 <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-orange-400 transition-colors" /></div>
               </div>
             </div>
@@ -354,7 +355,7 @@ export default function MyProjectsPage() {
 
       </div>
 
-      {/* 🚀 關鍵修改處：去除了多餘且錯誤的參數傳遞 */}
+      {/* 🚀 關鍵修復：完全移除 isOpen 等會造成 TS 報錯的屬性 */}
       {isCreateModalOpen && (
         <CreateProjectModal
           onClose={() => setIsCreateModalOpen(false)}

@@ -1,82 +1,122 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, UserCheck, FileText, Shield, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, UserCheck, Shield, ChevronLeft, ChevronRight, Menu, X, Rocket } from 'lucide-react';
+import AuthWidget from '@/components/AuthWidget';
 
 export default function Sidebar() {
   const pathname = usePathname();
-  // 內部狀態控制左側折疊
+  // 💻 控制左側折疊 (電腦版)
   const [isCollapsed, setIsCollapsed] = useState(false);
+  
+  // 📱 控制手機版選單滑出 (手機版 RWD)
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // 切換路徑時，手機版選單自動收起
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
 
   const menuItems = [
-    { label: '彙整全部專案', href: '/', icon: <LayoutDashboard className="w-4 h-4" />, isActive: pathname === '/' },
-    { label: '我的負責案件', href: '/my-projects', icon: <UserCheck className="w-4 h-4" />, isActive: pathname === '/my-projects' },
-    { label: '個別專案評估表', href: '/project/REQ-2026-001', icon: <FileText className="w-4 h-4" />, isActive: pathname.startsWith('/project') },
-    { label: '權限管理', href: '/permissions', icon: <Shield className="w-4 h-4" />, isActive: pathname === '/permissions' },
+    { label: '彙整全部專案', href: '/', icon: <LayoutDashboard className="w-5 h-5" />, isActive: pathname === '/' },
+    { label: '我的負責案件', href: '/my-projects', icon: <UserCheck className="w-5 h-5" />, isActive: pathname === '/my-projects' },
+    { label: '權限管理', href: '/admin', icon: <Shield className="w-5 h-5" />, isActive: pathname === '/admin' },
   ];
 
   return (
-    <aside 
-      className={`bg-white text-slate-700 min-h-screen flex flex-col border-r border-slate-200/80 select-none shrink-0 transition-all duration-300 ease-in-out ${
-        isCollapsed ? 'w-16' : 'w-64'
-      }`}
-    >
-      {/* 系統標誌區 + 折疊控制鈕 */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 gap-2 overflow-hidden">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <Layers className="w-5 h-5 text-indigo-600 shrink-0" />
+    <>
+      {/* 📱 手機版漢堡按鈕 (固定在左下角) */}
+      <button
+        onClick={() => setIsMobileOpen(true)}
+        className="md:hidden fixed bottom-6 left-6 z-[60] w-14 h-14 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-2xl hover:bg-indigo-700 transition-transform active:scale-95"
+      >
+        <Menu className="w-6 h-6" />
+      </button>
+
+      {/* 📱 手機版半透明遮罩 (點擊關閉) */}
+      {isMobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[50] animate-in fade-in"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      {/* 🖥️ 側邊欄主體 */}
+      <aside
+        className={`
+          bg-white text-slate-700 min-h-screen flex flex-col border-r border-slate-200/80 select-none shrink-0 transition-all duration-300 ease-in-out
+          fixed md:static inset-y-0 left-0 z-[55] shadow-2xl md:shadow-none
+          ${isCollapsed ? 'md:w-20' : 'md:w-64'} w-64
+          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}
+      >
+        {/* Header (Logo) */}
+        <div className={`h-16 flex items-center justify-between px-4 border-b border-slate-100 shrink-0 ${isCollapsed ? 'md:justify-center' : ''}`}>
           {!isCollapsed && (
-            <span className="font-bold text-base tracking-wider text-slate-900 font-sans truncate animate-in fade-in duration-200">
-              REQflow
-            </span>
+            <Link href="/" className="flex items-center gap-2 group">
+              <div className="bg-indigo-600 text-white p-1.5 rounded-lg group-hover:scale-105 transition-transform">
+                <Rocket className="w-5 h-5" />
+              </div>
+              <span className="font-black text-lg text-slate-800 tracking-tight md:block hidden">REQFlow</span>
+              <span className="font-black text-lg text-slate-800 tracking-tight md:hidden">REQFlow</span>
+            </Link>
           )}
-        </div>
-        
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors cursor-pointer"
-        >
-          {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-        </button>
-      </div>
+          {isCollapsed && (
+            <Link href="/" className="bg-indigo-600 text-white p-1.5 rounded-lg hidden md:block">
+              <Rocket className="w-5 h-5" />
+            </Link>
+          )}
 
-      {/* 導覽功能矩陣 */}
-      <nav className="flex-1 py-6 px-3 space-y-1">
-        {menuItems.map((item, index) => (
-          <Link
-            key={index}
-            href={item.href}
-            title={isCollapsed ? item.label : undefined}
-            className={`w-full flex items-center rounded-lg text-sm font-semibold transition-all ${
-              isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-4 py-2.5'
-            } ${
-              item.isActive
-                ? 'bg-indigo-50 text-indigo-600 shadow-sm shadow-indigo-100/50'
-                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-            }`}
+          {/* 電腦版：折疊按鈕 */}
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="hidden md:flex w-8 h-8 rounded-full bg-slate-50 border border-slate-200 items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
           >
-            <span className={item.isActive ? 'text-indigo-600' : 'text-slate-400'}>
-              {item.icon}
-            </span>
-            {!isCollapsed && <span className="truncate animate-in fade-in duration-200">{item.label}</span>}
-          </Link>
-        ))}
-      </nav>
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
 
-      {/* 底部使用者資訊區：沈廷翼 Admin */}
-      <div className={`p-3 border-t border-slate-100 flex items-center bg-slate-50/50 ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-        <div className="w-9 h-9 rounded-full bg-indigo-600/10 text-indigo-700 flex items-center justify-center font-bold text-sm border border-indigo-200/30 shrink-0">
-          廷翼
+          {/* 手機版：關閉按鈕 */}
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="md:hidden text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-md"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        {!isCollapsed && (
-          <div className="flex flex-col min-w-0 animate-in fade-in duration-200">
-            <span className="text-sm font-bold text-slate-800 truncate">沈廷翼</span>
-            <span className="text-xs font-semibold text-slate-400 truncate">智金處 / Admin</span>
-          </div>
-        )}
-      </div>
-    </aside>
+
+        {/* 導覽選單 */}
+        <nav className="flex-1 py-6 px-3 flex flex-col gap-1.5 overflow-y-auto custom-scrollbar">
+          {menuItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              title={isCollapsed ? item.label : undefined}
+              className={`w-full flex items-center rounded-lg text-sm font-semibold transition-all ${
+                isCollapsed ? 'md:justify-center md:p-2.5 px-4 py-2.5' : 'gap-3 px-4 py-2.5'
+              } ${
+                item.isActive
+                  ? 'bg-indigo-50 text-indigo-600 shadow-sm shadow-indigo-100/50'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <span className={item.isActive ? 'text-indigo-600' : 'text-slate-400'}>
+                {item.icon}
+              </span>
+              <span className={`truncate transition-all duration-200 ${isCollapsed ? 'md:hidden' : 'block'}`}>
+                {item.label}
+              </span>
+            </Link>
+          ))}
+        </nav>
+
+        {/* 底部 AuthWidget */}
+        <div className={`p-3 border-t border-slate-100 flex flex-col items-center bg-slate-50/50 ${isCollapsed ? 'md:justify-center' : 'gap-3'}`}>
+          {!isCollapsed && <AuthWidget />}
+          {isCollapsed && <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">U</div>}
+        </div>
+      </aside>
+    </>
   );
 }
