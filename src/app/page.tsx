@@ -123,12 +123,10 @@ export default function DashboardPage() {
       
       {/* 🚀 頂部導覽列 (Responsive) */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm shrink-0 gap-4">
-        {/* 左側：加上 md:ml-12 避開漢堡按鈕 */}
         <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight ml-12 md:ml-0 flex items-center gap-2">
           <BarChart2 className="w-5 h-5 text-indigo-500" /> 系統專案總覽
         </h1>
         
-        {/* 右側：按鈕與使用者狀態 */}
         <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto justify-between md:justify-end">
           <button 
             onClick={() => setIsCreateModalOpen(true)}
@@ -160,10 +158,9 @@ export default function DashboardPage() {
 
       <div className="px-4 md:px-8 pt-6 md:pt-8 pb-24 max-w-[1600px] mx-auto w-full flex-1 flex flex-col md:flex-row gap-6 md:gap-8 items-start">
         
-        {/* 主要內容區塊 */}
         <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
           
-          {/* 🚀 統計卡片區域 (Responsive Grid) */}
+          {/* 統計卡片區域 */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 cursor-pointer select-none shrink-0">
             <div onClick={() => setActiveFilter('ALL')} className={`bg-white rounded-2xl p-4 md:p-5 shadow-sm flex flex-col md:flex-row items-start justify-between transition-all gap-2 ${activeFilter === 'ALL' ? 'ring-2 ring-indigo-500 border-transparent shadow-md' : 'border border-slate-100 hover:border-indigo-200'}`}>
               <div>
@@ -198,10 +195,9 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 🚀 主要內容區塊 (搜尋列與專案列表) */}
+          {/* 主要內容區塊 (搜尋列與專案列表) */}
           <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-[400px]">
             
-            {/* 區塊標題與搜尋框 */}
             <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
               <div className="flex items-center gap-3">
                 <h2 className="text-base md:text-lg font-black text-slate-800">
@@ -222,7 +218,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 🚀 專案呈現區 (Mobile: 卡片式, Desktop: 表格) */}
             <div className="flex-1 bg-slate-50/30 rounded-b-2xl">
               {isLoading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400">
@@ -236,7 +231,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
-                  {/* 📱 手機版：卡片式列表 (< 768px) */}
+                  {/* 📱 手機版：卡片式列表 */}
                   <div className="md:hidden flex flex-col gap-3 p-4">
                     {finalFilteredProjects.map((proj) => {
                       const comp = calculateCompleteness(proj);
@@ -271,7 +266,7 @@ export default function DashboardPage() {
                     })}
                   </div>
 
-                  {/* 💻 電腦版：表格列表 (>= 768px) */}
+                  {/* 💻 電腦版：表格列表 */}
                   <div className="hidden md:block overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
                       <thead className="bg-slate-50/80 sticky top-0">
@@ -326,13 +321,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 右側：待處理事項側邊欄 (Desktop 顯示在右側，Mobile 排在下方) */}
-        <div className="w-full md:w-72 lg:w-80 flex flex-col gap-8 shrink-0 md:sticky md:top-8">
+        {/* 右側：待處理事項側邊欄 */}
+        <div className="flex flex-col gap-8 w-full md:w-72 lg:w-80 shrink-0 md:sticky md:top-8">
           <section>
             <h3 className="text-sm font-black text-slate-800 mb-4 px-1">待處理事項</h3>
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all group">
-                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600 transition-colors">待更新 <span className="text-slate-400 font-medium">(超過3天)</span></span></div>
+                <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0"><Clock className="w-4 h-4" /></div><span className="text-xs font-bold text-slate-600 group-hover:text-orange-600 transition-colors">待更新 <span className="text-slate-400 font-medium">(超過3工作天)</span></span></div>
                 <div className="flex items-center gap-2 text-xs font-black text-slate-700">{staleProjectsCount} <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-orange-400 transition-colors" /></div>
               </div>
             </div>
@@ -341,6 +336,7 @@ export default function DashboardPage() {
 
       </div>
 
+      {/* 🚀 關鍵修改處：去除了多餘且錯誤的參數傳遞 */}
       {isCreateModalOpen && (
         <CreateProjectModal
           onClose={() => setIsCreateModalOpen(false)}
