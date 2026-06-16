@@ -8,11 +8,11 @@ import { supabase } from '@/core/client/supabase';
 import {
   Loader2, ArrowLeft, Building2, Eye, X, Check, UploadCloud, RefreshCw,
   Columns, Lock, Save, FileText, Printer, CheckCircle2, Unlock, FileImage,
-  ChevronDown, Plus, Edit2, Search, LogOut, User as UserIcon
+  ChevronDown, Plus, Edit2, Search, LogOut, User as UserIcon, Trash2, AlertOctagon
 } from 'lucide-react';
 
 // ==========================================
-// 🚀 元件 1：協作鎖文字編輯卡片 (加入唯讀鎖定)
+// 🚀 元件 1：協作鎖文字編輯卡片
 // ==========================================
 function EditableCard({ 
   title, fieldKey, projectId, initialValue, currentUserId, 
@@ -196,8 +196,10 @@ export default function ProjectAssessmentPage() {
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [currentUserName, setCurrentUserName] = useState<string>('');
+  const [isAdmin, setIsAdmin] = useState<boolean>(false); // 🚀 記錄是否為 Admin
   const [isLoading, setIsLoading] = useState(true);
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); // 🚀 刪除處理狀態
   const [isReadOnlyMember, setIsReadOnlyMember] = useState(false);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
 
@@ -227,10 +229,11 @@ export default function ProjectAssessmentPage() {
         if (user) {
           setCurrentUserId(user.id);
           setCurrentUserEmail(user.email || '');
-          const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
-          if (profile?.full_name) {
+          const { data: profile } = await supabase.from('m01_users').select('full_name, system_role').eq('email', user.email).maybeSingle();
+          if (profile) {
              loggedInName = profile.full_name;
              setCurrentUserName(loggedInName);
+             setIsAdmin(profile.system_role === 'admin'); // 🚀 檢查是否為 Admin
           }
         }
 
@@ -269,6 +272,32 @@ export default function ProjectAssessmentPage() {
         alert('已成功解除所有鎖定！畫面將重新載入最新資料庫內容。');
         window.location.reload(); 
       } catch (error) { console.error(error); alert('解鎖失敗，請稍後再試。'); setIsUnlocking(false); }
+    }
+  };
+
+  // 🚀 刪除專案功能 (僅 Admin 可見/執行)
+  const handleDeleteProject = async () => {
+    if (!isAdmin) return;
+    const confirmMsg = `🛑 嚴重警告！\n\n您確定要永久刪除專案【${project.name}】嗎？\n包含所有文字、評估資料與上傳的架構圖皆會被永久銷毀。\n\n此操作無法復原，請再次確認！`;
+    
+    if (window.confirm(confirmMsg)) {
+      setIsDeleting(true);
+      try {
+        // 先清理 locks 跟 images 避免 foreign key constraint
+        await supabase.from('m01_edit_locks').delete().eq('project_id', projectId);
+        await supabase.from('m01_project_assessment_images').delete().eq('project_id', projectId);
+        
+        // 刪除專案本身
+        const { error } = await supabase.from('m01_projects').delete().eq('id', projectId);
+        if (error) throw error;
+        
+        alert('專案已成功刪除。');
+        router.push('/'); // 導向首頁
+      } catch (error: any) {
+        console.error('刪除失敗:', error);
+        alert(`刪除失敗: ${error.message}`);
+        setIsDeleting(false);
+      }
     }
   };
 
@@ -525,6 +554,21 @@ export default function ProjectAssessmentPage() {
           <EditableCard theme="orange" title="成效追蹤指標 (Tracking Metrics)" fieldKey="eval_kpi" projectId={projectId} initialValue={project.eval_kpi} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['eval_kpi']} placeholder="上線後的追蹤指標..." isReadOnlyMember={isReadOnlyMember} />
           <EditableCard theme="blue" title="綜合評估 (Comprehensive Judgment)" fieldKey="eval_conclusion" projectId={projectId} initialValue={project.eval_conclusion} currentUserId={currentUserId} onSave={handleSaveText} onConfirm={handleConfirmField} isConfirmed={confirmedFields['eval_conclusion']} placeholder="最終核定意見與建議..." isReadOnlyMember={isReadOnlyMember} />
         </div>
+
+        {/* 🚀 刪除專案按鈕區塊 (僅 Admin 可見) */}
+        {isAdmin && (
+          <div className="mt-8 pt-8 border-t border-slate-200 flex justify-end">
+            <button 
+              onClick={handleDeleteProject}
+              disabled={isDeleting}
+              className="flex items-center gap-2 px-6 py-3 bg-white border border-rose-200 text-rose-600 text-sm font-black rounded-xl hover:bg-rose-50 hover:border-rose-300 transition-all shadow-sm group disabled:opacity-50"
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />}
+              {isDeleting ? '刪除中...' : '永久刪除此專案'}
+            </button>
+          </div>
+        )}
+
       </div>
 
       {isStatusModalOpen && (
@@ -545,7 +589,6 @@ export default function ProjectAssessmentPage() {
             <div className="p-5 space-y-4">
               <div className="relative"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="搜尋姓名..." className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-xs font-bold focus:outline-none focus:border-indigo-400" /></div>
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-                {/* 🚀 關鍵修改：在此處使用 .filter() 過濾部門！ */}
                 {systemUsers
                   .filter(u => u.department === memberModalConfig.deptKey)
                   .filter(u => u.full_name && u.full_name.includes(searchTerm))
