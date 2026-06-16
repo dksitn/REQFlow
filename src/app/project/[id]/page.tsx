@@ -1,5 +1,8 @@
 'use client';
 
+// 🚀 關鍵修復：加入這行，告訴 Cloudflare 這個動態路由要在 Edge Runtime 執行
+export const runtime = 'edge';
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
@@ -85,7 +88,6 @@ export default function ProjectEvaluationPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col relative font-sans">
       
-      {/* 頂部固定控制列 */}
       <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm gap-4">
         <div className="flex items-center gap-4">
           <button onClick={() => router.back()} className="p-2 -ml-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors">
@@ -117,11 +119,8 @@ export default function ProjectEvaluationPage() {
 
       <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto w-full flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
         
-        {/* 左側主內容區 */}
         <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
-          
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-            {/* 流程說明區塊 (暫時用 Placeholder 取代獨立 Component) */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
               <div className="flex items-center gap-2">
                 <CheckSquare className="w-5 h-5 text-indigo-500" />
@@ -135,7 +134,6 @@ export default function ProjectEvaluationPage() {
               />
             </div>
 
-            {/* 影響評估區塊 */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
               <div className="flex items-center gap-2">
                 <Target className="w-5 h-5 text-blue-500" />
@@ -149,7 +147,6 @@ export default function ProjectEvaluationPage() {
             </div>
           </div>
 
-          {/* 架構圖區塊 */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <Server className="w-5 h-5 text-purple-500" />
@@ -164,13 +161,9 @@ export default function ProjectEvaluationPage() {
               </div>
             </div>
           </div>
-
         </div>
 
-        {/* 🚀 右側側邊設定區 (狀態管理) */}
         <div className="w-full xl:w-80 flex flex-col gap-6 shrink-0">
-          
-          {/* 專案狀態控制卡片 */}
           <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
               <h3 className="text-sm font-black text-slate-800">專案狀態管理</h3>
@@ -178,7 +171,6 @@ export default function ProjectEvaluationPage() {
             <div className="p-5 flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-500">目前階段</label>
-                {/* 🚀 動態渲染資料庫狀態字典 */}
                 <select
                   value={projectData.status_name_snapshot}
                   onChange={(e) => handleStatusChange(e.target.value)}
@@ -209,7 +201,6 @@ export default function ProjectEvaluationPage() {
             </div>
           </section>
 
-          {/* 專案人員設定 (簡化版) */}
           <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
               <Users className="w-4 h-4 text-slate-500" />
@@ -219,7 +210,6 @@ export default function ProjectEvaluationPage() {
               人員設定功能載入中...
             </div>
           </section>
-
         </div>
       </div>
     </div>
