@@ -5,8 +5,7 @@ export const runtime = 'edge';
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-// 🚀 修正了 SearchZoomIn 為 ZoomIn，解決 Vercel 編譯錯誤
-import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock, Building2, ZoomIn, Pencil } from 'lucide-react';
+import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock, Building2, ZoomIn, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { toPng } from 'html-to-image'; 
 import jsPDF from 'jspdf';
 
@@ -55,7 +54,10 @@ export default function ProjectEvaluationPage() {
   // Modal 狀態
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [activeDept, setActiveDept] = useState<string>('');
+  
+  // 🚀 將提案單位改為與指派人員一樣的 Modal
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   
@@ -63,6 +65,10 @@ export default function ProjectEvaluationPage() {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [pdfPreviewData, setPdfPreviewData] = useState<string[]>([]); 
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+  // 🚀 Admin 刪除案件的 Modal 狀態
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     async function fetchAllData() {
@@ -180,6 +186,21 @@ export default function ProjectEvaluationPage() {
     setLocks({});
   };
 
+  // 🚀 Admin 專屬：刪除案件
+  const handleDeleteProject = async () => {
+    if (currentUser?.system_role !== 'admin') return;
+    setIsDeleting(true);
+    try {
+      // 刪除專案 (如果資料庫有設定 cascade delete，相關的 lock 和 image 也會一併刪除)
+      await supabase.from('m01_projects').delete().eq('id', projectId);
+      router.push('/my-projects'); // 刪除後導回清單頁
+    } catch (error) {
+      console.error('刪除案件失敗:', error);
+      alert('刪除失敗，請稍後再試。');
+      setIsDeleting(false);
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'AS-IS' | 'TO-BE') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -200,7 +221,7 @@ export default function ProjectEvaluationPage() {
     await saveProjectToDB({ team_members: { ...currentTeam, [activeDept]: newDeptUsers } });
   };
 
-  // 🚀 預覽 PDF 邏輯：先產生圖片，並打開 Modal 讓使用者確認
+  // 預覽 PDF
   const handlePreviewPDF = async () => {
     setIsExporting(true);
     setPdfPreviewData([]);
@@ -232,7 +253,7 @@ export default function ProjectEvaluationPage() {
     }, 500); 
   };
 
-  // 🚀 正式匯出下載 PDF 檔案
+  // 匯出下載 PDF
   const handleDownloadPDF = () => {
     if (pdfPreviewData.length === 0) return;
     const pdf = new jsPDF('landscape', 'mm', 'a4'); 
@@ -255,7 +276,7 @@ export default function ProjectEvaluationPage() {
   const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
   const completeness = Math.round((completedGrids / totalGrids) * 100);
 
-  // === 🚀 網頁 UI (淺藍/淺灰色調) ===
+  // === 網頁 UI (淺藍/淺灰色調) ===
   const GridBlock = ({ title, dbField, type = 'textarea' }: { title: string, dbField: string, type?: 'textarea' | 'image' }) => {
     const isEditing = editingField === dbField;
     const isCompleted = confirmedFields[dbField];
@@ -301,7 +322,6 @@ export default function ProjectEvaluationPage() {
               {type === 'image' && images[dbField] ? (
                  <div className="relative">
                    <img src={images[dbField]} className="w-full h-auto block rounded-lg border border-slate-100 cursor-pointer" onClick={() => setZoomedImage(images[dbField])} alt={title}/> 
-                   {/* 🚀 放大檢視按鈕 (修改為 ZoomIn) */}
                    <button onClick={() => setZoomedImage(images[dbField])} className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><ZoomIn className="w-5 h-5"/></button>
                  </div>
               ) : type === 'image' ? (
@@ -350,7 +370,7 @@ export default function ProjectEvaluationPage() {
                   </button>
                 </div>
                 
-                {/* 🚀 專案名稱可直接編輯 */}
+                {/* 專案名稱可直接編輯 */}
                 <div className="flex items-center gap-2 group">
                   {isTitleEditing ? (
                     <input 
@@ -369,17 +389,23 @@ export default function ProjectEvaluationPage() {
                   )}
                   {!isTitleEditing && <button onClick={() => setIsTitleEditing(true)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 p-1"><Pencil className="w-4 h-4"/></button>}
                 </div>
-
               </div>
             </div>
             <div className="flex items-center gap-4">
+              
+              {/* 🚀 Admin 專屬：刪除案件按鈕 */}
+              {currentUser?.system_role === 'admin' && (
+                <button onClick={() => setIsDeleteModalOpen(true)} className="flex items-center gap-2 px-3 py-2 text-rose-600 text-sm font-bold rounded-lg hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200 mr-2">
+                  <Trash2 className="w-4 h-4" /> 刪除此案件
+                </button>
+              )}
+
               <div className="flex flex-col items-end gap-1">
                 <span className="text-[10px] font-bold text-slate-400">目前案件狀態</span>
                 <select value={projectData.status_name_snapshot} onChange={(e) => handleStatusChange(e.target.value)} disabled={isExporting} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-100">
                   {statusDict.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
-              {/* 🚀 預覽並另存 PDF */}
               <button onClick={handlePreviewPDF} disabled={isExporting} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} 
                 {isExporting ? '生成預覽中...' : '預覽並匯出報告'}
@@ -443,15 +469,39 @@ export default function ProjectEvaluationPage() {
         </div>
       </div>
 
+      {/* 🚀 Admin 解除鎖定按鈕 */}
       {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && (
         <div className="fixed bottom-8 right-8 z-50">
           <button onClick={handleUnlockAll} className="bg-rose-600 text-white p-3.5 rounded-full shadow-xl flex items-center gap-2 text-sm font-bold hover:bg-rose-700 hover:scale-105 transition-all">
-            <Unlock className="w-5 h-5"/> 解除編輯鎖定
+            <Unlock className="w-5 h-5"/> 解除全站編輯鎖定
           </button>
         </div>
       )}
 
-      {/* 🚀 單位選擇 Modal */}
+      {/* 🚀 Admin 刪除案件確認 Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col p-6">
+            <div className="flex items-center gap-3 text-rose-600 mb-4">
+               <AlertTriangle className="w-8 h-8" />
+               <h3 className="font-bold text-lg text-slate-900">確認刪除案件？</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-6">
+              您即將刪除案件 <strong className="text-slate-800">[{projectData?.project_code}] {projectData?.name}</strong>。<br/>
+              此操作無法復原，與該案件相關的所有評估資料、圖片及鎖定紀錄都將一併被永久移除。
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setIsDeleteModalOpen(false)} disabled={isDeleting} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">取消</button>
+              <button onClick={handleDeleteProject} disabled={isDeleting} className="px-4 py-2 text-sm font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700 shadow-sm flex items-center gap-2 transition-colors disabled:opacity-50">
+                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>} 
+                {isDeleting ? '刪除中...' : '確認刪除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 單位選擇 Modal */}
       {isDeptModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
@@ -496,7 +546,7 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 圖片放大檢視 Modal */}
+      {/* 圖片放大檢視 Modal */}
       {zoomedImage && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200] flex flex-col items-center justify-center p-8 animate-in fade-in" onClick={() => setZoomedImage(null)}>
           <button className="absolute top-6 right-6 text-white bg-white/10 hover:bg-white/20 p-2 rounded-full"><X className="w-8 h-8"/></button>
@@ -504,7 +554,7 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 PDF 預覽與下載 Modal */}
+      {/* PDF 預覽與下載 Modal */}
       {isPreviewModalOpen && pdfPreviewData.length > 0 && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex flex-col p-6 animate-in fade-in">
           <div className="flex items-center justify-between bg-white rounded-t-xl px-6 py-4 border-b border-slate-200 shadow-xl">
@@ -526,7 +576,7 @@ export default function ProjectEvaluationPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 🚀 隱藏的 PDF 專用排版區塊 (縮小字體 text-xs，確保不溢出橫式 A4)             */}
+      {/* 🚀 隱藏的 PDF 專用排版區塊 (保持不變)                                       */}
       {/* ========================================================================= */}
       <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
         
@@ -544,7 +594,6 @@ export default function ProjectEvaluationPage() {
             </div>
           );
 
-          // 🚀 嚴格使用 text-xs 與 text-sm 確保文字不溢出外框
           const PDFBlock = ({ title, content, colSpan = 1, className = "" }: { title: string, content: string | React.ReactNode, colSpan?: 1 | 2 | 3, className?: string }) => (
             <div className={`border-2 border-black rounded-lg p-4 bg-white flex flex-col ${colSpan === 2 ? 'col-span-2' : colSpan === 3 ? 'col-span-3' : ''} ${className}`}>
               <div className="text-sm font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">{title}</div>
