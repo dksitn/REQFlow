@@ -5,10 +5,12 @@ export const runtime = 'edge';
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock, Building2, SearchZoomIn, Pencil } from 'lucide-react';
+// 🚀 修正了 SearchZoomIn 為 ZoomIn，解決 Vercel 編譯錯誤
+import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock, Building2, ZoomIn, Pencil } from 'lucide-react';
 import { toPng } from 'html-to-image'; 
 import jsPDF from 'jspdf';
 
+// 提案單位清單
 const DEPARTMENTS = ['未指定', '作業服務總部', '應用科', '企劃科', '科技科', '智慧金融處', '資訊處', '業務部', '永續發展部'];
 
 const fetchImageAsBase64 = async (url: string | null | undefined): Promise<string> => {
@@ -59,7 +61,7 @@ export default function ProjectEvaluationPage() {
   
   // 放大圖片與預覽 PDF 狀態
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-  const [pdfPreviewData, setPdfPreviewData] = useState<string[]>([]); // 存放三頁的 base64 截圖
+  const [pdfPreviewData, setPdfPreviewData] = useState<string[]>([]); 
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export default function ProjectEvaluationPage() {
         });
       }).subscribe();
 
-    return () => supabase.removeChannel(lockSubscription);
+    return () => { supabase.removeChannel(lockSubscription); };
   }, [projectId]);
 
   const saveProjectToDB = async (updates: any) => {
@@ -135,7 +137,10 @@ export default function ProjectEvaluationPage() {
   const handleStatusChange = (newStatus: string) => saveProjectToDB({ status_name_snapshot: newStatus });
   
   const saveTitle = async () => {
-    if (!titleDraft.trim()) return setIsTitleEditing(false);
+    if (!titleDraft.trim()) {
+       setTitleDraft(projectData.name);
+       return setIsTitleEditing(false);
+    }
     await saveProjectToDB({ name: titleDraft });
     setIsTitleEditing(false);
   };
@@ -232,7 +237,7 @@ export default function ProjectEvaluationPage() {
     if (pdfPreviewData.length === 0) return;
     const pdf = new jsPDF('landscape', 'mm', 'a4'); 
     const pdfWidth = 297; 
-    const pdfHeight = 210; // A4 橫式固定高度
+    const pdfHeight = 210; 
     
     pdfPreviewData.forEach((imgData, index) => {
       if (index > 0) pdf.addPage();
@@ -250,7 +255,7 @@ export default function ProjectEvaluationPage() {
   const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
   const completeness = Math.round((completedGrids / totalGrids) * 100);
 
-  // === 🚀 網頁 UI ===
+  // === 🚀 網頁 UI (淺藍/淺灰色調) ===
   const GridBlock = ({ title, dbField, type = 'textarea' }: { title: string, dbField: string, type?: 'textarea' | 'image' }) => {
     const isEditing = editingField === dbField;
     const isCompleted = confirmedFields[dbField];
@@ -296,8 +301,8 @@ export default function ProjectEvaluationPage() {
               {type === 'image' && images[dbField] ? (
                  <div className="relative">
                    <img src={images[dbField]} className="w-full h-auto block rounded-lg border border-slate-100 cursor-pointer" onClick={() => setZoomedImage(images[dbField])} alt={title}/> 
-                   {/* 放大檢視按鈕 */}
-                   <button onClick={() => setZoomedImage(images[dbField])} className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><SearchZoomIn className="w-5 h-5"/></button>
+                   {/* 🚀 放大檢視按鈕 (修改為 ZoomIn) */}
+                   <button onClick={() => setZoomedImage(images[dbField])} className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><ZoomIn className="w-5 h-5"/></button>
                  </div>
               ) : type === 'image' ? (
                  <div className="py-12 flex flex-col items-center justify-center bg-slate-50 border border-dashed border-slate-300 rounded-lg m-1">
@@ -338,7 +343,7 @@ export default function ProjectEvaluationPage() {
                 <div className="flex items-center gap-3 mb-1">
                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded tracking-wider">{projectData.project_code}</span>
                   
-                  {/* 🚀 單位彈出式選擇 (取代原生 Select) */}
+                  {/* 🚀 單位彈出式選擇 Modal 觸發按鈕 */}
                   <button onClick={() => setIsDeptModalOpen(true)} className="flex items-center bg-slate-100 rounded px-2.5 py-1 border border-slate-200 hover:bg-slate-200 transition-colors">
                     <Building2 className="w-3 h-3 mr-1.5 text-slate-500" />
                     <span className="text-xs font-bold text-slate-700">{projectData.department || '設定提案單位'}</span>
@@ -374,7 +379,7 @@ export default function ProjectEvaluationPage() {
                   {statusDict.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
-              {/* 🚀 改為預覽並另存 PDF */}
+              {/* 🚀 預覽並另存 PDF */}
               <button onClick={handlePreviewPDF} disabled={isExporting} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} 
                 {isExporting ? '生成預覽中...' : '預覽並匯出報告'}
@@ -477,7 +482,7 @@ export default function ProjectEvaluationPage() {
               {usersList.filter(u => u.department === activeDept).map(user => {
                 const isSelected = projectData.team_members?.[activeDept]?.includes(user.full_name);
                 return (
-                  <div key={user.id} onClick={() => toggleUserSelection(user.full_name)} className={`flex items-center justify-between p-3.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200 hover:border-blue-200'}`}>
+                  <div key={user.id} onClick={() => toggleUserSelection(user.full_name)} className={`flex items-center justify-between p-3.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:border-blue-100'}`}>
                     <span className={`text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{user.full_name}</span>
                     {isSelected && <Check className="w-4 h-4 text-blue-600" />}
                   </div>
@@ -485,7 +490,7 @@ export default function ProjectEvaluationPage() {
               })}
             </div>
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <button onClick={() => setIsUserModalOpen(false)} className="px-6 py-2 bg-blue-600 text-white font-bold text-sm rounded-lg hover:bg-blue-700">完成指派</button>
+              <button onClick={() => setIsUserModalOpen(false)} className="px-5 py-2 bg-blue-600 text-white font-bold text-sm rounded hover:bg-blue-700">完成指派</button>
             </div>
           </div>
         </div>
@@ -521,7 +526,7 @@ export default function ProjectEvaluationPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 🚀 隱藏的 PDF 專用排版區塊 (確保字體縮小、不跑版、完美橫式 A4)                 */}
+      {/* 🚀 隱藏的 PDF 專用排版區塊 (縮小字體 text-xs，確保不溢出橫式 A4)             */}
       {/* ========================================================================= */}
       <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
         
@@ -539,7 +544,7 @@ export default function ProjectEvaluationPage() {
             </div>
           );
 
-          // 🚀 縮小字體 (title: text-sm, content: text-xs) 防止溢出
+          // 🚀 嚴格使用 text-xs 與 text-sm 確保文字不溢出外框
           const PDFBlock = ({ title, content, colSpan = 1, className = "" }: { title: string, content: string | React.ReactNode, colSpan?: 1 | 2 | 3, className?: string }) => (
             <div className={`border-2 border-black rounded-lg p-4 bg-white flex flex-col ${colSpan === 2 ? 'col-span-2' : colSpan === 3 ? 'col-span-3' : ''} ${className}`}>
               <div className="text-sm font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">{title}</div>
@@ -547,7 +552,6 @@ export default function ProjectEvaluationPage() {
             </div>
           );
 
-          // 🚀 固定像素，確保與 A4 完美對應 1122x793
           const PAGE_CLASS = "w-[1122px] h-[793px] p-[15mm] bg-white flex flex-col box-border border-[6px] border-[#00457C] overflow-hidden";
 
           return (
@@ -607,7 +611,6 @@ export default function ProjectEvaluationPage() {
                    <PDFBlock title="綜合評估結論" content={projectData?.eval_conclusion} className="border-[3px] border-[#00457C]"/>
                 </div>
 
-                {/* 簽核表單縮小並固定在底部 */}
                 <div className="border-[2px] border-black mt-auto">
                   <div className="grid grid-cols-6 w-full h-[100px]">
                     {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
