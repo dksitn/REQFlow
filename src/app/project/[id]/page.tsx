@@ -6,11 +6,12 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
 import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image'; // 🚀 改用更強大的現代截圖套件
 import jsPDF from 'jspdf';
 
-// 將外部圖片網址轉換為 Base64 以繞過 CORS 限制
-const fetchImageAsBase64 = async (url: string): Promise<string> => {
+// 🚀 加入完整的 Null 防呆檢查
+const fetchImageAsBase64 = async (url: string | null | undefined): Promise<string> => {
+  if (!url) return ''; // 防呆：如果是空的直接回傳空字串
   if (url.startsWith('data:image')) return url; 
   try {
     const response = await fetch(url);
@@ -48,7 +49,6 @@ export default function ProjectEvaluationPage() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [activeDept, setActiveDept] = useState<string>('');
 
-  // 🚀 使用 useRef 來穩定抓取 PDF 隱藏區塊
   const pdfPage1Ref = useRef<HTMLDivElement>(null);
   const pdfPage2Ref = useRef<HTMLDivElement>(null);
   const pdfPage3Ref = useRef<HTMLDivElement>(null);
@@ -89,7 +89,9 @@ export default function ProjectEvaluationPage() {
         if (imagesRes.data) {
           const imgMap: Record<string, string> = {};
           for (const img of imagesRes.data) {
-            imgMap[img.image_type] = await fetchImageAsBase64(img.image_url);
+            if (img.image_url) {
+               imgMap[img.image_type] = await fetchImageAsBase64(img.image_url);
+            }
           }
           setImages(imgMap);
         }
@@ -199,7 +201,7 @@ export default function ProjectEvaluationPage() {
     await saveProjectToDB({ team_members: newTeam });
   };
 
-  // 🚀 穩定版 PDF 產出邏輯
+  // 🚀 全新 PDF 產出邏輯 (使用 html-to-image 徹底解決 LAB 顏色解析失敗的問題)
   const handleExportPDF = async () => {
     setIsExporting(true);
     
@@ -208,26 +210,24 @@ export default function ProjectEvaluationPage() {
         const pdf = new jsPDF('landscape', 'mm', 'a4');
         const pdfWidth = 297; 
         
-        // 確保 refs 存在
         const pages = [pdfPage1Ref.current, pdfPage2Ref.current, pdfPage3Ref.current];
         
         for (let i = 0; i < pages.length; i++) {
           const element = pages[i];
-          if (!element) {
-            console.error(`找不到第 ${i+1} 頁的 DOM 元素`);
-            continue;
-          }
+          if (!element) continue;
 
-          // 截圖轉換
-          const canvas = await html2canvas(element, { 
-            scale: 2, 
-            useCORS: true, 
-            allowTaint: true,
-            backgroundColor: '#ffffff'
+          // 使用 html-to-image 取代 html2canvas
+          const imgData = await toPng(element, { 
+            pixelRatio: 2, 
+            backgroundColor: '#ffffff',
+            style: {
+              transform: 'scale(1)',
+              transformOrigin: 'top left'
+            }
           });
           
-          const imgData = canvas.toDataURL('image/png');
-          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+          // 透過 DOM 元素的寬高來計算 PDF 中的正確比例
+          const pdfHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
 
           if (i > 0) pdf.addPage();
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
@@ -236,11 +236,11 @@ export default function ProjectEvaluationPage() {
         pdf.save(`${projectData?.project_code || '專案'}_綜合評估報告.pdf`);
       } catch (error) {
         console.error('PDF 匯出失敗', error);
-        alert('匯出 PDF 時發生錯誤。');
+        alert('匯出 PDF 時發生錯誤。請查看主控台錯誤訊息。');
       } finally {
         setIsExporting(false);
       }
-    }, 100); 
+    }, 300); 
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
@@ -458,10 +458,8 @@ export default function ProjectEvaluationPage() {
       )}
 
       {/* 🚀 隱藏的 PDF 生成專用排版區塊 */}
-      {/* 綁定 ref，不再使用 getElementById，確保 html2canvas 百分百抓得到 */}
-      <div className="fixed top-[-9999px] left-0 pointer-events-none opacity-0">
+      <div className="absolute left-[-9999px] top-0 w-[1122px] bg-white text-slate-800 font-sans">
         
-        {/* PDF 第一頁 (1~4層) */}
         <div ref={pdfPage1Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h1 className="text-2xl font-black text-slate-900">{projectData?.name} - 綜合評估報告</h1>
@@ -486,7 +484,6 @@ export default function ProjectEvaluationPage() {
           </div>
         </div>
 
-        {/* PDF 第二頁 (第5層 圖片) */}
         <div ref={pdfPage2Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h2 className="text-xl font-black text-slate-800">系統架構圖 (AS-IS / TO-BE)</h2>
@@ -507,7 +504,6 @@ export default function ProjectEvaluationPage() {
           </div>
         </div>
 
-        {/* PDF 第三頁 (第6層 + 簽核表) */}
         <div ref={pdfPage3Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h2 className="text-xl font-black text-slate-800">綜合評估與簽核</h2>
