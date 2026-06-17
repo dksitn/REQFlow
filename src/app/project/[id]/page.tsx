@@ -5,13 +5,16 @@ export const runtime = 'edge';
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock } from 'lucide-react';
-import { toPng } from 'html-to-image'; // 🚀 改用更強大的現代截圖套件
+import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock, Building2 } from 'lucide-react';
+import { toPng } from 'html-to-image'; 
 import jsPDF from 'jspdf';
 
-// 🚀 加入完整的 Null 防呆檢查
+// 提案單位清單 (已加入作業服務總部)
+const DEPARTMENTS = ['未指定', '作業服務總部', '應用科', '企劃科', '科技科', '智慧金融處', '資訊處', '業務部', '永續發展部'];
+
+// 將圖片轉為 Base64 以繞過 html-to-image 跨域限制
 const fetchImageAsBase64 = async (url: string | null | undefined): Promise<string> => {
-  if (!url) return ''; // 防呆：如果是空的直接回傳空字串
+  if (!url) return ''; 
   if (url.startsWith('data:image')) return url; 
   try {
     const response = await fetch(url);
@@ -23,8 +26,7 @@ const fetchImageAsBase64 = async (url: string | null | undefined): Promise<strin
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.warn('無法將圖片轉為 Base64:', url, error);
-    return url; 
+    return url || ''; 
   }
 };
 
@@ -46,12 +48,12 @@ export default function ProjectEvaluationPage() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [confirmedFields, setConfirmedFields] = useState<Record<string, boolean>>({});
 
-  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [activeDept, setActiveDept] = useState<string>('');
-
   const pdfPage1Ref = useRef<HTMLDivElement>(null);
   const pdfPage2Ref = useRef<HTMLDivElement>(null);
   const pdfPage3Ref = useRef<HTMLDivElement>(null);
+
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [activeDept, setActiveDept] = useState<string>('');
 
   useEffect(() => {
     async function fetchAllData() {
@@ -73,9 +75,7 @@ export default function ProjectEvaluationPage() {
         if (projRes.data) {
           setProjectData(projRes.data);
           setConfirmedFields(projRes.data.confirmed_fields || {});
-          if (!projRes.data.team_members) {
-            projRes.data.team_members = { '應用科': [], '企劃科': [], '科技科': [] };
-          }
+          if (!projRes.data.team_members) projRes.data.team_members = { '應用科': [], '企劃科': [], '科技科': [] };
         }
         if (statRes.data) setStatusDict(statRes.data);
         if (usersRes.data) setUsersList(usersRes.data);
@@ -89,20 +89,19 @@ export default function ProjectEvaluationPage() {
         if (imagesRes.data) {
           const imgMap: Record<string, string> = {};
           for (const img of imagesRes.data) {
-            if (img.image_url) {
-               imgMap[img.image_type] = await fetchImageAsBase64(img.image_url);
-            }
+            if (img.image_url) imgMap[img.image_type] = await fetchImageAsBase64(img.image_url);
           }
           setImages(imgMap);
         }
       } catch (error) {
-        console.error('資料載入失敗:', error);
+        console.error('載入失敗', error);
       } finally {
         setIsLoading(false);
       }
     }
     fetchAllData();
 
+    // 啟動即時監聽 (Realtime) 以處理共編鎖定
     const lockSubscription = supabase.channel('locks')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'm01_edit_locks', filter: `project_id=eq.${projectId}` }, payload => {
         setLocks(prev => {
@@ -125,31 +124,21 @@ export default function ProjectEvaluationPage() {
     try {
       await supabase.from('m01_projects').update(updates).eq('id', projectId);
       setProjectData((prev: any) => ({ ...prev, ...updates }));
-    } catch (error) {
-      console.error('儲存失敗', error);
-    }
+    } catch (error) {}
   };
 
-  const handleStatusChange = (newStatus: string) => {
-    saveProjectToDB({ status_name_snapshot: newStatus });
-  };
+  const handleStatusChange = (newStatus: string) => saveProjectToDB({ status_name_snapshot: newStatus });
+  const handleDepartmentChange = (newDept: string) => saveProjectToDB({ department: newDept });
 
   const handleEdit = async (field: string, currentValue: string) => {
     if (locks[field] && locks[field].user_id !== currentUser?.id) return; 
     setEditingField(field);
     setDrafts(prev => ({ ...prev, [field]: currentValue || '' }));
-    await supabase.from('m01_edit_locks').upsert({
-      project_id: projectId,
-      field_name: field,
-      user_id: currentUser?.id,
-      user_name: currentUser?.full_name,
-      locked_at: new Date().toISOString()
-    });
+    await supabase.from('m01_edit_locks').upsert({ project_id: projectId, field_name: field, user_id: currentUser?.id, user_name: currentUser?.full_name, locked_at: new Date().toISOString() });
   };
 
   const handleCancel = async (field: string) => {
     setEditingField(null);
-    setDrafts(prev => ({ ...prev, [field]: '' }));
     await supabase.from('m01_edit_locks').delete().match({ project_id: projectId, field_name: field });
   };
 
@@ -166,7 +155,7 @@ export default function ProjectEvaluationPage() {
   };
 
   const handleUnlockAll = async () => {
-    if (!confirm('確定要解除所有人的編輯鎖定嗎？')) return;
+    if (!confirm('確定解除全站所有人的編輯鎖定嗎？')) return;
     await supabase.from('m01_edit_locks').delete().eq('project_id', projectId);
     setLocks({});
   };
@@ -174,215 +163,198 @@ export default function ProjectEvaluationPage() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'AS-IS' | 'TO-BE') => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;
-      await supabase.from('m01_project_assessment_images').upsert({
-        project_id: projectId,
-        image_type: type,
-        image_url: base64String
-      });
+      await supabase.from('m01_project_assessment_images').upsert({ project_id: projectId, image_type: type, image_url: base64String });
       setImages(prev => ({ ...prev, [type]: base64String }));
     };
     reader.readAsDataURL(file);
   };
 
-  const openUserModal = (dept: string) => {
-    setActiveDept(dept);
-    setIsUserModalOpen(true);
-  };
-
+  const openUserModal = (dept: string) => { setActiveDept(dept); setIsUserModalOpen(true); };
   const toggleUserSelection = async (userName: string) => {
     const currentTeam = projectData.team_members || { '應用科': [], '企劃科': [], '科技科': [] };
     const deptUsers = currentTeam[activeDept] || [];
-    let newDeptUsers = deptUsers.includes(userName) ? deptUsers.filter((n: string) => n !== userName) : [...deptUsers, userName];
-    const newTeam = { ...currentTeam, [activeDept]: newDeptUsers };
-    await saveProjectToDB({ team_members: newTeam });
+    const newDeptUsers = deptUsers.includes(userName) ? deptUsers.filter((n: string) => n !== userName) : [...deptUsers, userName];
+    await saveProjectToDB({ team_members: { ...currentTeam, [activeDept]: newDeptUsers } });
   };
 
-  // 🚀 全新 PDF 產出邏輯 (使用 html-to-image 徹底解決 LAB 顏色解析失敗的問題)
+  // 🚀 PDF 產出邏輯 (A4 橫式, html-to-image)
   const handleExportPDF = async () => {
     setIsExporting(true);
-    
     setTimeout(async () => {
       try {
-        const pdf = new jsPDF('landscape', 'mm', 'a4');
+        const pdf = new jsPDF('landscape', 'mm', 'a4'); // A4 橫式 (Landscape)
         const pdfWidth = 297; 
-        
         const pages = [pdfPage1Ref.current, pdfPage2Ref.current, pdfPage3Ref.current];
         
         for (let i = 0; i < pages.length; i++) {
           const element = pages[i];
           if (!element) continue;
-
-          // 使用 html-to-image 取代 html2canvas
+          
           const imgData = await toPng(element, { 
             pixelRatio: 2, 
-            backgroundColor: '#ffffff',
-            style: {
-              transform: 'scale(1)',
-              transformOrigin: 'top left'
-            }
+            backgroundColor: '#ffffff'
           });
           
-          // 透過 DOM 元素的寬高來計算 PDF 中的正確比例
           const pdfHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
-
           if (i > 0) pdf.addPage();
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
         }
-
+        
         pdf.save(`${projectData?.project_code || '專案'}_綜合評估報告.pdf`);
       } catch (error) {
-        console.error('PDF 匯出失敗', error);
-        alert('匯出 PDF 時發生錯誤。請查看主控台錯誤訊息。');
-      } finally {
-        setIsExporting(false);
+        console.error(error);
+        alert('匯出 PDF 時發生錯誤。');
+      } finally { 
+        setIsExporting(false); 
       }
-    }, 300); 
+    }, 500); // 確保圖表有時間渲染
   };
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-[#00457C]" /></div>;
   if (!projectData) return <div className="p-8 text-center text-red-500 font-bold">找不到專案資料</div>;
 
   const totalGrids = 11; 
   const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
   const completeness = Math.round((completedGrids / totalGrids) * 100);
 
-  // --- 共用的格子 UI 元件 (網頁顯示用) ---
-  const GridBlock = ({ title, dbField, type = 'textarea', heightClass = 'min-h-[200px]' }: { title: string, dbField: string, type?: 'textarea' | 'image', heightClass?: string }) => {
+  // === 網頁專用彩色 GridBlock UI (北富銀風格) ===
+  const GridBlock = ({ title, dbField, type = 'textarea' }: { title: string, dbField: string, type?: 'textarea' | 'image' }) => {
     const isEditing = editingField === dbField;
     const isCompleted = confirmedFields[dbField];
     const value = projectData[dbField] || '';
     const isLockedByOther = locks[dbField] && locks[dbField].user_id !== currentUser?.id;
 
     return (
-      <div className={`flex flex-col bg-white border ${isCompleted ? 'border-emerald-500 shadow-emerald-50' : isEditing ? 'border-indigo-500 shadow-md ring-1 ring-indigo-500' : 'border-emerald-500'} rounded-xl shadow-sm overflow-hidden transition-all ${heightClass}`}>
-        <div className={`px-4 py-3 flex items-center justify-between border-b ${isCompleted ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-emerald-200'}`}>
+      <div className={`flex flex-col bg-white border-2 ${isCompleted ? 'border-[#00457C]' : isEditing ? 'border-[#009B77] shadow-lg ring-1 ring-[#009B77]' : 'border-slate-200'} rounded-lg shadow-sm transition-all overflow-hidden`}>
+        <div className={`px-4 py-2.5 flex items-center justify-between border-b ${isCompleted ? 'bg-[#00457C]/5' : 'bg-slate-50'}`}>
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isCompleted ? 'bg-emerald-500' : isLockedByOther ? 'bg-rose-500' : isEditing ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300'}`}></span>
-            <h3 className="text-sm font-black text-slate-800">{title}</h3>
+             <div className={`w-1.5 h-4 rounded-full ${isCompleted ? 'bg-[#00457C]' : 'bg-slate-300'}`}></div>
+             <h3 className="text-sm font-bold text-[#333] tracking-tight">{title}</h3>
           </div>
           <div className="flex gap-2">
             {isLockedByOther ? (
-              <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded flex items-center gap-1"><Lock className="w-3 h-3"/> {locks[dbField].user_name} 編輯中</span>
+              <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded border border-rose-100 flex items-center gap-1"><Lock className="w-3 h-3"/> {locks[dbField].user_name} 編輯中</span>
             ) : (
               <>
                 {!isEditing && !isCompleted && (
-                  <button onClick={() => handleEdit(dbField, value)} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded flex items-center gap-1"><Edit3 className="w-3.5 h-3.5"/> 編輯</button>
+                  <button onClick={() => handleEdit(dbField, value)} className="text-xs font-bold text-[#00457C] hover:bg-slate-100 px-2 py-1 rounded transition-colors flex items-center gap-1"><Edit3 className="w-3 h-3"/> 編輯</button>
                 )}
                 {isCompleted && (
-                  <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><Check className="w-4 h-4"/> 已完成</span>
+                  <span className="text-xs font-bold text-[#00457C] flex items-center gap-1"><Check className="w-4 h-4"/> 已確認</span>
                 )}
               </>
             )}
           </div>
         </div>
         
-        <div className="p-4 flex-1 flex flex-col gap-3 relative">
+        <div className="flex-1 flex flex-col p-0 relative">
           {isEditing ? (
             type === 'textarea' ? (
-              <textarea 
-                value={drafts[dbField] !== undefined ? drafts[dbField] : value} 
-                onChange={(e) => setDrafts({...drafts, [dbField]: e.target.value})}
-                className="w-full flex-1 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-indigo-500 resize-none"
-              />
+              <div className="p-4 flex flex-col gap-3">
+                <textarea value={drafts[dbField] || ''} onChange={(e) => setDrafts({...drafts, [dbField]: e.target.value})} className="w-full min-h-[120px] bg-slate-50 border border-slate-200 rounded p-3 text-sm outline-none focus:border-[#00457C] resize-none" />
+                <div className="flex justify-end gap-2">
+                   <button onClick={() => handleCancel(dbField)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded">取消</button>
+                   <button onClick={() => handleSaveGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-[#00457C] text-white rounded hover:bg-[#003560]">儲存內容</button>
+                </div>
+              </div>
             ) : null
           ) : (
-            <div className={`flex-1 flex ${type==='image'? 'items-center justify-center bg-slate-50/50 rounded-lg border border-slate-100' : ''} text-sm whitespace-pre-wrap ${value || images[dbField] ? 'text-slate-700' : 'text-slate-400 italic'}`}>
+            <div className={`p-4 text-sm whitespace-pre-wrap ${value || images[dbField] ? 'text-slate-700' : 'text-slate-400 italic'}`}>
               {type === 'image' && images[dbField] ? (
-                 <img src={images[dbField]} crossOrigin="anonymous" className="max-w-full max-h-[150px] object-contain" alt={title}/> 
+                 <img src={images[dbField]} className="w-full h-auto block" alt={title}/> 
               ) : type === 'image' ? (
-                 <span>尚未上傳圖片</span>
-              ) : value || '尚未填寫資料...'}
+                 <div className="py-12 flex flex-col items-center justify-center bg-slate-50 border-2 border-dashed border-slate-200 rounded m-2">
+                    <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
+                    <span className="text-xs font-bold text-slate-400">尚未上傳架構圖</span>
+                 </div>
+              ) : value || '尚未填入評估資訊...'}
             </div>
           )}
 
           {type === 'image' && !isCompleted && !isLockedByOther && (
-             <label className="absolute bottom-4 right-4 cursor-pointer bg-white border border-slate-200 shadow-sm text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-lg flex items-center gap-2">
-               <ImageIcon className="w-4 h-4"/> 上傳圖片
+             <label className="absolute bottom-4 right-4 cursor-pointer bg-white/90 backdrop-blur shadow-md text-xs font-bold text-[#00457C] border border-slate-200 px-3 py-2 rounded-full hover:bg-white flex items-center gap-2">
+               <ImageIcon className="w-4 h-4"/> 更換圖片
                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, dbField as 'AS-IS'|'TO-BE')} />
              </label>
           )}
 
-          <div>
-            {isEditing && (
-              <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-slate-100">
-                <button onClick={() => handleCancel(dbField)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-md flex items-center gap-1"><X className="w-3.5 h-3.5"/> 取消</button>
-                <button onClick={() => handleSaveGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-md flex items-center gap-1"><Save className="w-3.5 h-3.5"/> 儲存</button>
-              </div>
-            )}
-            {!isEditing && !isCompleted && (value || images[dbField]) && !isLockedByOther && (
-              <div className="flex justify-end mt-2 pt-3 border-t border-slate-100">
-                <button onClick={() => handleCompleteGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 rounded-md flex items-center gap-1"><Check className="w-3.5 h-3.5"/> 標記為完成</button>
-              </div>
-            )}
-          </div>
+          {!isEditing && !isCompleted && (value || images[dbField]) && !isLockedByOther && (
+            <div className="px-4 pb-4 flex justify-end">
+              <button onClick={() => handleCompleteGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-[#009B77] text-white hover:bg-[#008260] rounded flex items-center gap-1 shadow-sm"><Check className="w-3.5 h-3.5"/> 確認完成</button>
+            </div>
+          )}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans pb-24 overflow-x-hidden relative">
+    <div className="min-h-screen bg-[#F4F7F9] flex flex-col font-sans pb-24 overflow-x-hidden relative">
       
-      {/* 頂部固定資訊列 */}
-      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-[1600px] mx-auto px-6 py-4 flex flex-col gap-4">
+      {/* --- 網頁上方導覽列 (不影響 PDF) --- */}
+      <div className="sticky top-0 z-40 bg-[#00457C] text-white border-b border-[#003560] shadow-lg">
+        <div className="max-w-[1600px] mx-auto px-6 py-3.5 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button onClick={() => router.back()} className="p-2 -ml-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
+            <div className="flex items-center gap-5">
+              <button onClick={() => router.back()} className="p-2 -ml-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
               <div className="flex flex-col">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono border border-indigo-200">{projectData.project_code}</span>
-                  <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{projectData.department}</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-black bg-white/20 px-2 py-0.5 rounded tracking-widest">{projectData.project_code}</span>
+                  <div className="flex items-center bg-white/10 border border-white/20 rounded px-2 py-0.5">
+                    <Building2 className="w-3 h-3 mr-1.5 text-white/60" />
+                    <select value={projectData.department || '未指定'} onChange={(e) => handleDepartmentChange(e.target.value)} disabled={isExporting} className="text-xs font-bold bg-transparent outline-none cursor-pointer">
+                      {DEPARTMENTS.map(d => <option key={d} value={d} className="text-black">{d}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <h1 className="text-xl font-black text-slate-900 mt-1">{projectData.name}</h1>
+                <h1 className="text-xl font-bold tracking-tight">{projectData.name}</h1>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <div className="flex flex-col items-end gap-1">
-                <span className="text-[10px] font-bold text-slate-400">專案狀態</span>
-                <select value={projectData.status_name_snapshot} onChange={(e) => handleStatusChange(e.target.value)} disabled={isExporting} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:border-indigo-500 cursor-pointer">
-                  {statusDict.map(status => (
-                    <option key={status.id} value={status.name}>{status.name}</option>
-                  ))}
+                <span className="text-[10px] font-bold text-white/60 tracking-widest">目前案件狀態</span>
+                <select value={projectData.status_name_snapshot} onChange={(e) => handleStatusChange(e.target.value)} disabled={isExporting} className="px-3 py-1.5 bg-white text-[#00457C] border-none rounded font-black text-sm outline-none cursor-pointer">
+                  {statusDict.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
-              <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-indigo-700 disabled:opacity-50">
+              <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 px-5 py-2 bg-[#009B77] text-white text-sm font-bold rounded shadow-md hover:bg-[#008260] transition-all active:scale-95 disabled:opacity-50">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} 
-                {isExporting ? '產出 PDF 中...' : '產出 PDF 檔案'}
+                匯出評估報告
               </button>
             </div>
           </div>
-
           <div className="flex items-center gap-4">
-            <span className="text-xs font-black text-slate-600 whitespace-nowrap">資料完整度 {completeness}%</span>
-            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-              <div className={`h-full transition-all duration-500 ${completeness === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${completeness}%` }}></div>
+            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden border border-white/5">
+              <div className="h-full bg-[#009B77] transition-all duration-700" style={{ width: `${completeness}%` }}></div>
             </div>
+            <span className="text-[11px] font-black text-white/80 whitespace-nowrap tracking-widest uppercase">Completeness {completeness}%</span>
           </div>
         </div>
       </div>
 
-      {/* 網頁可視區域 */}
-      <div className="max-w-[1600px] mx-auto w-full px-6 py-8 flex flex-col gap-6">
+      {/* --- 網頁主內容區 --- */}
+      <div className="max-w-[1600px] mx-auto w-full px-6 py-8 flex flex-col gap-10">
         
-        <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col gap-4">
-          <h2 className="text-base font-black text-slate-800 flex items-center gap-2"><Lock className="w-4 h-4 text-slate-400"/> 專案負責人編制</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* 第 2 層：專案負責人 */}
+        <section className="bg-white rounded-lg p-6 shadow-sm border border-slate-200">
+          <h2 className="text-sm font-black text-[#00457C] mb-5 flex items-center gap-2"><Lock className="w-4 h-4"/> 專案權責指派編制</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {['應用科', '企劃科', '科技科'].map(dept => (
-              <div key={dept} className="flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl">
+              <div key={dept} className="flex flex-col p-4 bg-slate-50/80 border border-slate-100 rounded">
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm font-bold text-slate-700">{dept}</span>
-                  <button onClick={() => openUserModal(dept)} className="text-[10px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-200 flex items-center gap-1"><UserPlus className="w-3 h-3"/> 加入</button>
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-wider">{dept}</span>
+                  <button onClick={() => openUserModal(dept)} className="text-[10px] font-bold bg-[#00457C] text-white px-2.5 py-1 rounded hover:bg-[#003560] flex items-center gap-1 transition-colors"><UserPlus className="w-3 h-3"/> 指派</button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(projectData.team_members?.[dept] || []).length > 0 ? 
                     projectData.team_members[dept].map((name: string) => (
-                      <span key={name} className="text-xs font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-md text-slate-600">{name}</span>
-                    )) : <span className="text-xs text-slate-400">尚未指派</span>
+                      <span key={name} className="text-xs font-bold bg-white border border-slate-200 px-3 py-1 rounded-full text-slate-700 shadow-sm flex items-center gap-1">
+                        <div className="w-1 h-1 bg-[#009B77] rounded-full"></div> {name}
+                      </span>
+                    )) : <span className="text-xs text-slate-400 italic">尚未指派負責經辦</span>
                   }
                 </div>
               </div>
@@ -390,23 +362,27 @@ export default function ProjectEvaluationPage() {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 第 3 層 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <GridBlock title="現行工作職掌與工作流程" dbField="workflow_text" />
           <GridBlock title="現行作業痛點" dbField="pain_points_text" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <GridBlock title="影響範圍 - 人員" dbField="impact_people_text" heightClass="min-h-[150px]" />
-          <GridBlock title="影響範圍 - 時間" dbField="impact_time_text" heightClass="min-h-[150px]" />
-          <GridBlock title="影響範圍 - 效益" dbField="impact_benefit_text" heightClass="min-h-[150px]" />
+        {/* 第 4 層 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <GridBlock title="影響範圍 - 人員" dbField="impact_people_text" />
+          <GridBlock title="影響範圍 - 時間" dbField="impact_time_text" />
+          <GridBlock title="影響範圍 - 效益" dbField="impact_benefit_text" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <GridBlock title="現行系統架構 (AS-IS)" dbField="AS-IS" type="image" heightClass="min-h-[150px]" />
-          <GridBlock title="未來系統架構 (TO-BE)" dbField="TO-BE" type="image" heightClass="min-h-[150px]" />
+        {/* 第 5 層：左右滿版 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <GridBlock title="現行系統架構圖 (AS-IS)" dbField="AS-IS" type="image" />
+          <GridBlock title="未來系統架構圖 (TO-BE)" dbField="TO-BE" type="image" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 第 6 層 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <GridBlock title="業務面評估" dbField="eval_business" />
           <GridBlock title="技術面評估" dbField="eval_technical" />
           <GridBlock title="成效追蹤指標 (KPI)" dbField="eval_kpi" />
@@ -414,120 +390,162 @@ export default function ProjectEvaluationPage() {
         </div>
       </div>
 
-      {/* Admin 強制解除鎖定 */}
+      {/* Admin 解除鎖定按鈕 */}
       {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <button onClick={handleUnlockAll} className="bg-rose-600 text-white px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:bg-rose-700 hover:scale-105 transition-all">
-            <Unlock className="w-5 h-5"/> 強制解除所有編輯鎖定
+        <div className="fixed bottom-8 right-8 z-50">
+          <button onClick={handleUnlockAll} className="bg-rose-600 text-white p-4 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:bg-rose-700 hover:scale-105 transition-all">
+            <Unlock className="w-6 h-6"/> 解除全站編輯鎖定
           </button>
         </div>
       )}
 
       {/* 人員選擇 Modal */}
       {isUserModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-[#00457C]/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-lg w-full max-w-md shadow-2xl overflow-hidden flex flex-col border border-slate-200">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-black text-slate-800">指派 {activeDept} 負責人</h3>
+              <h3 className="font-bold text-[#00457C] flex items-center gap-2"><UserPlus className="w-5 h-5"/> 指派 {activeDept} 人員</h3>
               <button onClick={() => setIsUserModalOpen(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto flex flex-col gap-2">
-              {usersList.filter(u => u.department === activeDept).length === 0 ? (
-                <div className="text-center text-sm text-slate-400 py-8">該部門目前無人員資料</div>
-              ) : (
-                usersList.filter(u => u.department === activeDept).map(user => {
-                  const isSelected = projectData.team_members?.[activeDept]?.includes(user.full_name);
-                  return (
-                    <div 
-                      key={user.id} 
-                      onClick={() => toggleUserSelection(user.full_name)}
-                      className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}
-                    >
-                      <span className={`text-sm font-bold ${isSelected ? 'text-indigo-700' : 'text-slate-700'}`}>{user.full_name}</span>
-                      {isSelected && <Check className="w-4 h-4 text-indigo-600" />}
-                    </div>
-                  );
-                })
-              )}
+              {usersList.filter(u => u.department === activeDept).map(user => {
+                const isSelected = projectData.team_members?.[activeDept]?.includes(user.full_name);
+                return (
+                  <div key={user.id} onClick={() => toggleUserSelection(user.full_name)} className={`flex items-center justify-between p-4 rounded border-2 cursor-pointer transition-all ${isSelected ? 'bg-[#00457C]/5 border-[#00457C]' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                    <span className={`text-sm font-bold ${isSelected ? 'text-[#00457C]' : 'text-slate-700'}`}>{user.full_name}</span>
+                    {isSelected && <Check className="w-4 h-4 text-[#00457C]" />}
+                  </div>
+                );
+              })}
             </div>
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <button onClick={() => setIsUserModalOpen(false)} className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">完成設定</button>
+              <button onClick={() => setIsUserModalOpen(false)} className="px-8 py-2 bg-[#00457C] text-white font-bold rounded hover:bg-[#003560]">確認指派</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🚀 隱藏的 PDF 生成專用排版區塊 */}
-      <div className="absolute left-[-9999px] top-0 w-[1122px] bg-white text-slate-800 font-sans">
+      {/* ========================================================================= */}
+      {/* 🚀 隱藏的 PDF 專用排版區塊 (完全還原富邦公文格式 / 橫式 A4)                 */}
+      {/* ========================================================================= */}
+      <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
         
-        <div ref={pdfPage1Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
-          <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
-            <h1 className="text-2xl font-black text-slate-900">{projectData?.name} - 綜合評估報告</h1>
-            <div className="text-sm font-bold text-slate-500">專案編號: {projectData?.project_code} | 提案單位: {projectData?.department}</div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {['應用科', '企劃科', '科技科'].map(dept => (
-              <div key={dept} className="flex flex-col p-3 border-2 border-emerald-500 rounded-lg">
-                <span className="text-sm font-bold mb-2">{dept}負責人</span>
-                <span className="text-sm">{(projectData?.team_members?.[dept] || []).join(', ') || '未指派'}</span>
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行工作職掌與工作流程</span><span className="text-sm whitespace-pre-wrap">{projectData?.workflow_text || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行作業痛點</span><span className="text-sm whitespace-pre-wrap">{projectData?.pain_points_text || '無'}</span></div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 人員</span><span className="text-sm whitespace-pre-wrap">{projectData?.impact_people_text || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 時間</span><span className="text-sm whitespace-pre-wrap">{projectData?.impact_time_text || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 效益</span><span className="text-sm whitespace-pre-wrap">{projectData?.impact_benefit_text || '無'}</span></div>
-          </div>
-        </div>
-
-        <div ref={pdfPage2Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
-          <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
-            <h2 className="text-xl font-black text-slate-800">系統架構圖 (AS-IS / TO-BE)</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-6 flex-1">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col h-[650px]">
-              <span className="font-bold border-b border-emerald-200 pb-2 mb-2 text-emerald-700">現行系統架構 (AS-IS)</span>
-              <div className="flex-1 flex items-center justify-center bg-slate-50">
-                {images['AS-IS'] ? <img src={images['AS-IS']} crossOrigin="anonymous" className="max-w-full max-h-[500px] object-contain" /> : '無圖片'}
+        {/* PDF 共用標題元件 */}
+        {(() => {
+          const PDFHeader = ({ pageNum }: { pageNum: number }) => (
+            <div className="w-full mb-6 flex flex-col">
+              <div className="text-center text-slate-400 font-mono text-sm tracking-widest mb-4">--- PAGE {pageNum} ---</div>
+              <div className="text-center text-2xl font-black mb-4">{projectData?.name} - 綜合評估報告</div>
+              <div className="text-center text-sm font-bold border-b border-black pb-4">
+                專案編號: {projectData?.project_code} | 提案單位: {projectData?.department || '未指定'}
               </div>
             </div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col h-[650px]">
-              <span className="font-bold border-b border-emerald-200 pb-2 mb-2 text-emerald-700">未來系統架構 (TO-BE)</span>
-              <div className="flex-1 flex items-center justify-center bg-slate-50">
-                {images['TO-BE'] ? <img src={images['TO-BE']} crossOrigin="anonymous" className="max-w-full max-h-[500px] object-contain" /> : '無圖片'}
-              </div>
-            </div>
-          </div>
-        </div>
+          );
 
-        <div ref={pdfPage3Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
-          <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
-            <h2 className="text-xl font-black text-slate-800">綜合評估與簽核</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-4 flex-1">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">業務面評估</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_business || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">技術面評估</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_technical || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">成效追蹤指標 (KPI)</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_kpi || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">綜合評估結論</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_conclusion || '無'}</span></div>
-          </div>
-          
-          <div className="border-2 border-black mt-4">
-            <h2 className="text-lg font-black text-black bg-slate-100 p-2 text-center border-b-2 border-black tracking-widest">專案簽核流程</h2>
-            <div className="grid grid-cols-6 w-full">
-              {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
-                <div key={idx} className={`flex flex-col h-[150px] ${idx !== 5 ? 'border-r-2 border-black' : ''}`}>
-                  <div className="bg-slate-50 border-b-2 border-black py-2 px-1 text-center text-sm font-black">{role}</div>
-                  <div className="flex-1 bg-white"></div>
+          // A4 橫式像素大小 (297mm x 210mm, 假設 96dpi 約為 1122x793)
+          const PAGE_CLASS = "w-[1122px] h-[793px] p-[15mm] bg-white flex flex-col box-border";
+
+          return (
+            <>
+              {/* === PAGE 1 (第 2,3,4 層) === */}
+              <div ref={pdfPage1Ref} className={PAGE_CLASS}>
+                <PDFHeader pageNum={1} />
+                
+                <div className="grid grid-cols-3 gap-6 mb-6">
+                  {['應用科', '企劃科', '科技科'].map(dept => (
+                    <div key={dept} className="flex flex-col">
+                      <span className="font-bold text-base mb-2">{dept}負責人</span>
+                      <span className="text-base text-slate-800">{(projectData?.team_members?.[dept] || []).join(', ') || '無'}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
 
+                <div className="grid grid-cols-2 gap-6 mb-6 flex-1">
+                  <div className="flex flex-col h-full">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">現行工作職掌與工作流程</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.workflow_text || '無'}</div>
+                  </div>
+                  <div className="flex flex-col h-full">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">現行作業痛點</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.pain_points_text || '無'}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-6 flex-1 border-t border-black pt-6">
+                  <div className="flex flex-col h-full">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">影響範圍 - 人員</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.impact_people_text || '無'}</div>
+                  </div>
+                  <div className="flex flex-col h-full">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">影響範圍 - 時間</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.impact_time_text || '無'}</div>
+                  </div>
+                  <div className="flex flex-col h-full">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">影響範圍 - 效益</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.impact_benefit_text || '無'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* === PAGE 2 (第 5 層 AS-IS / TO-BE) === */}
+              <div ref={pdfPage2Ref} className={PAGE_CLASS}>
+                <PDFHeader pageNum={2} />
+                <div className="font-bold text-xl mb-4 text-center">系統架構圖 (AS-IS / TO-BE)</div>
+                <div className="grid grid-cols-2 gap-8 flex-1 h-full pb-4">
+                  <div className="flex flex-col border border-black p-2 h-full">
+                    <div className="font-bold text-lg text-center border-b border-black pb-2 mb-2 bg-slate-100">現行系統架構 (AS-IS)</div>
+                    <div className="flex-1 flex items-center justify-center">
+                      {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-[500px] object-contain" /> : <span className="text-slate-400">無圖片</span>}
+                    </div>
+                  </div>
+                  <div className="flex flex-col border border-black p-2 h-full">
+                    <div className="font-bold text-lg text-center border-b border-black pb-2 mb-2 bg-slate-100">未來系統架構 (TO-BE)</div>
+                    <div className="flex-1 flex items-center justify-center">
+                      {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-[500px] object-contain" /> : <span className="text-slate-400">無圖片</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* === PAGE 3 (第 6 層 + 簽核流程) === */}
+              <div ref={pdfPage3Ref} className={PAGE_CLASS}>
+                <PDFHeader pageNum={3} />
+                <div className="font-bold text-xl mb-4 text-center">綜合評估與簽核</div>
+                
+                <div className="grid grid-cols-2 gap-x-8 gap-y-6 flex-1 mb-6">
+                  <div className="flex flex-col">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">業務面評估</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_business || '無'}</div>
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">技術面評估</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_technical || '無'}</div>
+                  </div>
+                  <div className="flex flex-col border-t border-black pt-4">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">成效追蹤指標 (KPI)</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_kpi || '無'}</div>
+                  </div>
+                  <div className="flex flex-col border-t border-black pt-4">
+                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">綜合評估結論</div>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_conclusion || '無'}</div>
+                  </div>
+                </div>
+
+                {/* 簽核表單固定在底部 */}
+                <div className="border border-black mt-auto">
+                  <div className="grid grid-cols-6 w-full h-[150px]">
+                    {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
+                      <div key={idx} className={`flex flex-col ${idx !== 5 ? 'border-r border-black' : ''}`}>
+                        <div className="border-b border-black py-2 text-center text-sm font-bold bg-slate-100">{role}</div>
+                        <div className="flex-1 bg-white"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );
