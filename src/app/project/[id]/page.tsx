@@ -9,6 +9,24 @@ import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Im
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
+// 🚀 核心修復：將外部圖片網址轉換為 Base64 以繞過 CORS 限制
+const fetchImageAsBase64 = async (url: string): Promise<string> => {
+  if (url.startsWith('data:image')) return url; // 如果已經是 Base64 就直接回傳
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.warn('無法將圖片轉為 Base64:', url, error);
+    return url; // 轉換失敗則回傳原網址，盡力而為
+  }
+};
+
 export default function ProjectEvaluationPage() {
   const params = useParams();
   const router = useRouter();
@@ -63,9 +81,12 @@ export default function ProjectEvaluationPage() {
           setLocks(lockMap);
         }
 
+        // 🚀 核心修復：載入圖片時，預先將圖片轉為 Base64
         if (imagesRes.data) {
           const imgMap: Record<string, string> = {};
-          imagesRes.data.forEach(img => imgMap[img.image_type] = img.image_url);
+          for (const img of imagesRes.data) {
+            imgMap[img.image_type] = await fetchImageAsBase64(img.image_url);
+          }
           setImages(imgMap);
         }
       } catch (error) {
@@ -148,6 +169,7 @@ export default function ProjectEvaluationPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 🚀 將上傳的圖片轉為 Base64 存入 DB，確保 html2canvas 可以讀取
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;
@@ -174,7 +196,6 @@ export default function ProjectEvaluationPage() {
     await saveProjectToDB({ team_members: newTeam });
   };
 
-  // 🚀 背景無感 PDF 產出邏輯
   const handleExportPDF = async () => {
     setIsExporting(true);
     
@@ -189,9 +210,16 @@ export default function ProjectEvaluationPage() {
           const element = document.getElementById(pages[i]);
           if (!element) continue;
 
-          const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          const imgData = canvas.toDataURL('image/png');
+          // 🚀 加入 logging 以利除錯，並強制使用 CORS
+          const canvas = await html2canvas(element, { 
+            scale: 2, 
+            useCORS: true, 
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            logging: true 
+          });
           
+          const imgData = canvas.toDataURL('image/png');
           const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
           if (i > 0) pdf.addPage();
@@ -201,11 +229,11 @@ export default function ProjectEvaluationPage() {
         pdf.save(`${projectData?.project_code || '專案'}_綜合評估報告.pdf`);
       } catch (error) {
         console.error('PDF 匯出失敗', error);
-        alert('匯出 PDF 時發生錯誤。');
+        alert('匯出 PDF 時發生錯誤。請確認圖片來源是否支援。');
       } finally {
         setIsExporting(false);
       }
-    }, 100);
+    }, 300); // 稍微拉長一點延遲，確保圖片 Base64 完全渲染
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
@@ -223,7 +251,6 @@ export default function ProjectEvaluationPage() {
     const isLockedByOther = locks[dbField] && locks[dbField].user_id !== currentUser?.id;
 
     return (
-      // 🚀 將 border 預設為翡翠綠，除非在編輯中才會變藍
       <div className={`flex flex-col bg-white border ${isCompleted ? 'border-emerald-500 shadow-emerald-50' : isEditing ? 'border-indigo-500 shadow-md ring-1 ring-indigo-500' : 'border-emerald-500'} rounded-xl shadow-sm overflow-hidden transition-all ${heightClass}`}>
         <div className={`px-4 py-3 flex items-center justify-between border-b ${isCompleted ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-emerald-200'}`}>
           <div className="flex items-center gap-2">
@@ -257,9 +284,9 @@ export default function ProjectEvaluationPage() {
             ) : null
           ) : (
             <div className={`flex-1 flex ${type==='image'? 'items-center justify-center bg-slate-50/50 rounded-lg border border-slate-100' : ''} text-sm whitespace-pre-wrap ${value || images[dbField] ? 'text-slate-700' : 'text-slate-400 italic'}`}>
-              {/* 🚀 圖片區塊的圖片改為 max-h-[150px] 以符合減半高度 */}
               {type === 'image' && images[dbField] ? (
-                 <img src={images[dbField]} className="max-w-full max-h-[150px] object-contain" alt={title}/> 
+                 // 🚀 加上 crossOrigin 屬性以防萬一
+                 <img src={images[dbField]} crossOrigin="anonymous" className="max-w-full max-h-[150px] object-contain" alt={title}/> 
               ) : type === 'image' ? (
                  <span>尚未上傳圖片</span>
               ) : value || '尚未填寫資料...'}
@@ -333,7 +360,7 @@ export default function ProjectEvaluationPage() {
         </div>
       </div>
 
-      {/* 🚀 網頁可視區域 (一般使用者看到的內容) */}
+      {/* 網頁可視區域 */}
       <div className="max-w-[1600px] mx-auto w-full px-6 py-8 flex flex-col gap-6">
         
         <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col gap-4">
@@ -369,7 +396,6 @@ export default function ProjectEvaluationPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* 🚀 圖片區塊高度減為 min-h-[150px]，並自帶綠框 (GridBlock預設) */}
           <GridBlock title="現行系統架構 (AS-IS)" dbField="AS-IS" type="image" heightClass="min-h-[150px]" />
           <GridBlock title="未來系統架構 (TO-BE)" dbField="TO-BE" type="image" heightClass="min-h-[150px]" />
         </div>
@@ -425,10 +451,9 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 隱藏的 PDF 生成專用排版區塊 (移出畫面外，完全不干擾網頁) */}
+      {/* 🚀 隱藏的 PDF 生成專用排版區塊 */}
       <div className="absolute left-[-9999px] top-0 w-[1122px] bg-white text-slate-800 font-sans">
         
-        {/* PDF 第一頁 (1~4層) */}
         <div id="hidden-pdf-page-1" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h1 className="text-2xl font-black text-slate-900">{projectData.name} - 綜合評估報告</h1>
@@ -453,7 +478,6 @@ export default function ProjectEvaluationPage() {
           </div>
         </div>
 
-        {/* PDF 第二頁 (第5層 圖片) - 這裡因為是 PDF 專用，所以圖片可以盡量放大 */}
         <div id="hidden-pdf-page-2" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h2 className="text-xl font-black text-slate-800">系統架構圖 (AS-IS / TO-BE)</h2>
@@ -462,22 +486,43 @@ export default function ProjectEvaluationPage() {
             <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col h-[650px]">
               <span className="font-bold border-b border-emerald-200 pb-2 mb-2 text-emerald-700">現行系統架構 (AS-IS)</span>
               <div className="flex-1 flex items-center justify-center bg-slate-50">
-                {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-full object-contain" /> : '無圖片'}
+                {images['AS-IS'] ? <img src={images['AS-IS']} crossOrigin="anonymous" className="max-w-full max-h-[500px] object-contain" /> : '無圖片'}
               </div>
             </div>
             <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col h-[650px]">
               <span className="font-bold border-b border-emerald-200 pb-2 mb-2 text-emerald-700">未來系統架構 (TO-BE)</span>
               <div className="flex-1 flex items-center justify-center bg-slate-50">
-                {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-full object-contain" /> : '無圖片'}
+                {images['TO-BE'] ? <img src={images['TO-BE']} crossOrigin="anonymous" className="max-w-full max-h-[500px] object-contain" /> : '無圖片'}
               </div>
             </div>
           </div>
         </div>
 
-        {/* PDF 第三頁 (第6層 + 簽核表) */}
         <div id="hidden-pdf-page-3" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h2 className="text-xl font-black text-slate-800">綜合評估與簽核</h2>
           </div>
           <div className="grid grid-cols-2 gap-4 flex-1">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">業務面評估</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_business || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">技術面評估</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_technical || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">成效追蹤指標 (KPI)</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_kpi || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">綜合評估結論</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_conclusion || '無'}</span></div>
+          </div>
+          
+          <div className="border-2 border-black mt-4">
+            <h2 className="text-lg font-black text-black bg-slate-100 p-2 text-center border-b-2 border-black tracking-widest">專案簽核流程</h2>
+            <div className="grid grid-cols-6 w-full">
+              {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
+                <div key={idx} className={`flex flex-col h-[150px] ${idx !== 5 ? 'border-r-2 border-black' : ''}`}>
+                  <div className="bg-slate-50 border-b-2 border-black py-2 px-1 text-center text-sm font-black">{role}</div>
+                  <div className="flex-1 bg-white"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
