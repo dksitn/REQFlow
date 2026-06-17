@@ -220,7 +220,7 @@ export default function ProjectEvaluationPage() {
       } finally { 
         setIsExporting(false); 
       }
-    }, 500);
+    }, 500); 
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
@@ -347,7 +347,6 @@ export default function ProjectEvaluationPage() {
 
       <div className="max-w-[1600px] mx-auto w-full px-8 py-10 flex flex-col gap-12">
         
-        {/* 負責人區域 */}
         <section className="bg-white rounded-3xl p-8 shadow-xl border-4 border-emerald-100">
           <h2 className="text-xl font-black text-emerald-900 mb-6 flex items-center gap-3"><Lock className="w-6 h-6 text-emerald-300"/> 專案權責指派與負責經辦</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -371,7 +370,6 @@ export default function ProjectEvaluationPage() {
           </div>
         </section>
 
-        {/* 網格系統 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <GridBlock title="現行工作職掌與工作流程" dbField="workflow_text" iconType='workflow'/>
           <GridBlock title="現行作業痛點需求" dbField="pain_points_text" iconType='pain'/>
@@ -396,7 +394,6 @@ export default function ProjectEvaluationPage() {
         </div>
       </div>
 
-      {/* Admin 解除鎖定按鈕 */}
       {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && (
         <div className="fixed bottom-10 right-10 z-50">
           <button onClick={handleUnlockAll} className="bg-rose-600 text-white p-5 rounded-full shadow-3xl flex items-center gap-3 font-bold hover:bg-rose-700 hover:scale-105 transition-all">
@@ -405,7 +402,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 人員選擇 Modal */}
       {isUserModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-3xl overflow-hidden flex flex-col border-4 border-emerald-100">
@@ -432,11 +428,10 @@ export default function ProjectEvaluationPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 🚀 隱藏 PDF 區塊 (完全改回專業區塊藍 / 橫式 A4 / 比照附檔 PDF)             */}
+      {/* 🚀 隱藏 PDF 區塊 (完全還原富邦公文格式 / 橫式 A4 / 修正型別錯誤)               */}
       {/* ========================================================================= */}
       <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
         
-        {/* PDF 共用標題元件 */}
         {(() => {
           const PDFHeader = ({ pageNum, title }: { pageNum: number, title: string }) => (
             <div className="w-full mb-6 flex flex-col border-b-[6px] border-[#00457C] pb-4">
@@ -451,7 +446,7 @@ export default function ProjectEvaluationPage() {
             </div>
           );
 
-          // PDF 公文區塊元件
+          // ⚠️ 已移除錯誤的 iconType 屬性定義，完美通過 TypeScript 檢查
           const PDFBlock = ({ title, content, colSpan = 1, className = "" }: { title: string, content: string | React.ReactNode, colSpan?: 1 | 2 | 3, className?: string }) => (
             <div className={`border-2 border-black rounded-xl p-5 bg-white flex flex-col ${colSpan === 2 ? 'col-span-2' : colSpan === 3 ? 'col-span-3' : ''} ${className}`}>
               <div className="text-base font-black text-slate-900 border-b-2 border-slate-100 pb-2 mb-3 tracking-tight">{title}</div>
@@ -459,7 +454,6 @@ export default function ProjectEvaluationPage() {
             </div>
           );
 
-          // A4 橫式像素大小 (297mm x 210mm, 假設 96dpi 約為 1122x793)
           const PAGE_CLASS = "w-[1122px] h-[793px] p-[15mm] bg-white flex flex-col box-border border-[10px] border-[#00457C]";
 
           return (
@@ -482,10 +476,11 @@ export default function ProjectEvaluationPage() {
                    <PDFBlock title="現行作業痛點需求" content={projectData?.pain_points_text} />
                 </div>
 
+                {/* ⚠️ 已移除這裡先前的 iconType='people'，解決 build error */}
                 <div className="grid grid-cols-3 gap-6 flex-1 h-full border-t border-black pt-6">
-                   <PDFBlock title="影響範圍 - 人員" content={projectData?.impact_people_text} iconType='people'/>
-                   <PDFBlock title="影響範圍 - 時間" content={projectData?.impact_time_text} iconType='people'/>
-                   <PDFBlock title="影響範圍 - 效益" content={projectData?.impact_benefit_text} iconType='people'/>
+                   <PDFBlock title="影響範圍 - 人員" content={projectData?.impact_people_text} />
+                   <PDFBlock title="影響範圍 - 時間" content={projectData?.impact_time_text} />
+                   <PDFBlock title="影響範圍 - 效益" content={projectData?.impact_benefit_text} />
                 </div>
               </div>
 
@@ -496,13 +491,13 @@ export default function ProjectEvaluationPage() {
                   <div className="flex flex-col border-[4px] border-[#00457C] rounded-2xl overflow-hidden h-full">
                     <div className="bg-[#00457C] text-white px-5 py-3 text-sm font-black text-center tracking-widest uppercase">現行系統架構圖 (Current AS-IS)</div>
                     <div className="flex-1 flex items-center justify-center bg-slate-50 p-2">
-                      {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-[500px] object-contain" /> : <IllustrativeIcon type='image'/>}
+                      {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-[500px] object-contain" /> : <span className="text-slate-400">無圖片</span>}
                     </div>
                   </div>
                   <div className="flex flex-col border-[4px] border-[#00457C] rounded-2xl overflow-hidden h-full">
                     <div className="bg-[#00457C] text-white px-5 py-3 text-sm font-black text-center tracking-widest uppercase">未來規劃系統架構圖 (Planned TO-BE)</div>
                     <div className="flex-1 flex items-center justify-center bg-slate-50 p-2">
-                      {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-[500px] object-contain" /> : <IllustrativeIcon type='image'/>}
+                      {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-[500px] object-contain" /> : <span className="text-slate-400">無圖片</span>}
                     </div>
                   </div>
                 </div>
@@ -517,11 +512,10 @@ export default function ProjectEvaluationPage() {
                    <PDFBlock title="技術可行性評估" content={projectData?.eval_technical} />
                    <div className="col-span-2 grid grid-cols-2 gap-8 border-t border-black pt-6">
                       <PDFBlock title="專案成效追蹤指標 (KPI)" content={projectData?.eval_kpi} />
-                      <PDFBlock title="綜合評估結論" content={projectData?.eval_conclusion} className="border-emerald-300"/>
+                      <PDFBlock title="綜合評估結論" content={projectData?.eval_conclusion} className="border-[#00457C]"/>
                    </div>
                 </div>
 
-                {/* 簽核表單固定在底部 */}
                 <div className="border border-black mt-auto">
                   <div className="grid grid-cols-6 w-full h-[140px]">
                     {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
