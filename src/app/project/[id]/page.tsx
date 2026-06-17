@@ -2,16 +2,16 @@
 
 export const runtime = 'edge';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
 import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// 🚀 核心修復：將外部圖片網址轉換為 Base64 以繞過 CORS 限制
+// 將外部圖片網址轉換為 Base64 以繞過 CORS 限制
 const fetchImageAsBase64 = async (url: string): Promise<string> => {
-  if (url.startsWith('data:image')) return url; // 如果已經是 Base64 就直接回傳
+  if (url.startsWith('data:image')) return url; 
   try {
     const response = await fetch(url);
     const blob = await response.blob();
@@ -23,7 +23,7 @@ const fetchImageAsBase64 = async (url: string): Promise<string> => {
     });
   } catch (error) {
     console.warn('無法將圖片轉為 Base64:', url, error);
-    return url; // 轉換失敗則回傳原網址，盡力而為
+    return url; 
   }
 };
 
@@ -47,6 +47,11 @@ export default function ProjectEvaluationPage() {
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [activeDept, setActiveDept] = useState<string>('');
+
+  // 🚀 使用 useRef 來穩定抓取 PDF 隱藏區塊
+  const pdfPage1Ref = useRef<HTMLDivElement>(null);
+  const pdfPage2Ref = useRef<HTMLDivElement>(null);
+  const pdfPage3Ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function fetchAllData() {
@@ -81,7 +86,6 @@ export default function ProjectEvaluationPage() {
           setLocks(lockMap);
         }
 
-        // 🚀 核心修復：載入圖片時，預先將圖片轉為 Base64
         if (imagesRes.data) {
           const imgMap: Record<string, string> = {};
           for (const img of imagesRes.data) {
@@ -169,7 +173,6 @@ export default function ProjectEvaluationPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 🚀 將上傳的圖片轉為 Base64 存入 DB，確保 html2canvas 可以讀取
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;
@@ -196,6 +199,7 @@ export default function ProjectEvaluationPage() {
     await saveProjectToDB({ team_members: newTeam });
   };
 
+  // 🚀 穩定版 PDF 產出邏輯
   const handleExportPDF = async () => {
     setIsExporting(true);
     
@@ -204,19 +208,22 @@ export default function ProjectEvaluationPage() {
         const pdf = new jsPDF('landscape', 'mm', 'a4');
         const pdfWidth = 297; 
         
-        const pages = ['hidden-pdf-page-1', 'hidden-pdf-page-2', 'hidden-pdf-page-3'];
+        // 確保 refs 存在
+        const pages = [pdfPage1Ref.current, pdfPage2Ref.current, pdfPage3Ref.current];
         
         for (let i = 0; i < pages.length; i++) {
-          const element = document.getElementById(pages[i]);
-          if (!element) continue;
+          const element = pages[i];
+          if (!element) {
+            console.error(`找不到第 ${i+1} 頁的 DOM 元素`);
+            continue;
+          }
 
-          // 🚀 加入 logging 以利除錯，並強制使用 CORS
+          // 截圖轉換
           const canvas = await html2canvas(element, { 
             scale: 2, 
             useCORS: true, 
             allowTaint: true,
-            backgroundColor: '#ffffff',
-            logging: true 
+            backgroundColor: '#ffffff'
           });
           
           const imgData = canvas.toDataURL('image/png');
@@ -229,11 +236,11 @@ export default function ProjectEvaluationPage() {
         pdf.save(`${projectData?.project_code || '專案'}_綜合評估報告.pdf`);
       } catch (error) {
         console.error('PDF 匯出失敗', error);
-        alert('匯出 PDF 時發生錯誤。請確認圖片來源是否支援。');
+        alert('匯出 PDF 時發生錯誤。');
       } finally {
         setIsExporting(false);
       }
-    }, 300); // 稍微拉長一點延遲，確保圖片 Base64 完全渲染
+    }, 100); 
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
@@ -285,7 +292,6 @@ export default function ProjectEvaluationPage() {
           ) : (
             <div className={`flex-1 flex ${type==='image'? 'items-center justify-center bg-slate-50/50 rounded-lg border border-slate-100' : ''} text-sm whitespace-pre-wrap ${value || images[dbField] ? 'text-slate-700' : 'text-slate-400 italic'}`}>
               {type === 'image' && images[dbField] ? (
-                 // 🚀 加上 crossOrigin 屬性以防萬一
                  <img src={images[dbField]} crossOrigin="anonymous" className="max-w-full max-h-[150px] object-contain" alt={title}/> 
               ) : type === 'image' ? (
                  <span>尚未上傳圖片</span>
@@ -452,33 +458,36 @@ export default function ProjectEvaluationPage() {
       )}
 
       {/* 🚀 隱藏的 PDF 生成專用排版區塊 */}
-      <div className="absolute left-[-9999px] top-0 w-[1122px] bg-white text-slate-800 font-sans">
+      {/* 綁定 ref，不再使用 getElementById，確保 html2canvas 百分百抓得到 */}
+      <div className="fixed top-[-9999px] left-0 pointer-events-none opacity-0">
         
-        <div id="hidden-pdf-page-1" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
+        {/* PDF 第一頁 (1~4層) */}
+        <div ref={pdfPage1Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
-            <h1 className="text-2xl font-black text-slate-900">{projectData.name} - 綜合評估報告</h1>
-            <div className="text-sm font-bold text-slate-500">專案編號: {projectData.project_code} | 提案單位: {projectData.department}</div>
+            <h1 className="text-2xl font-black text-slate-900">{projectData?.name} - 綜合評估報告</h1>
+            <div className="text-sm font-bold text-slate-500">專案編號: {projectData?.project_code} | 提案單位: {projectData?.department}</div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {['應用科', '企劃科', '科技科'].map(dept => (
               <div key={dept} className="flex flex-col p-3 border-2 border-emerald-500 rounded-lg">
                 <span className="text-sm font-bold mb-2">{dept}負責人</span>
-                <span className="text-sm">{(projectData.team_members?.[dept] || []).join(', ') || '未指派'}</span>
+                <span className="text-sm">{(projectData?.team_members?.[dept] || []).join(', ') || '未指派'}</span>
               </div>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行工作職掌與工作流程</span><span className="text-sm whitespace-pre-wrap">{projectData.workflow_text || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行作業痛點</span><span className="text-sm whitespace-pre-wrap">{projectData.pain_points_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行工作職掌與工作流程</span><span className="text-sm whitespace-pre-wrap">{projectData?.workflow_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行作業痛點</span><span className="text-sm whitespace-pre-wrap">{projectData?.pain_points_text || '無'}</span></div>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 人員</span><span className="text-sm whitespace-pre-wrap">{projectData.impact_people_text || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 時間</span><span className="text-sm whitespace-pre-wrap">{projectData.impact_time_text || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 效益</span><span className="text-sm whitespace-pre-wrap">{projectData.impact_benefit_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 人員</span><span className="text-sm whitespace-pre-wrap">{projectData?.impact_people_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 時間</span><span className="text-sm whitespace-pre-wrap">{projectData?.impact_time_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 效益</span><span className="text-sm whitespace-pre-wrap">{projectData?.impact_benefit_text || '無'}</span></div>
           </div>
         </div>
 
-        <div id="hidden-pdf-page-2" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
+        {/* PDF 第二頁 (第5層 圖片) */}
+        <div ref={pdfPage2Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h2 className="text-xl font-black text-slate-800">系統架構圖 (AS-IS / TO-BE)</h2>
           </div>
@@ -498,15 +507,16 @@ export default function ProjectEvaluationPage() {
           </div>
         </div>
 
-        <div id="hidden-pdf-page-3" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
+        {/* PDF 第三頁 (第6層 + 簽核表) */}
+        <div ref={pdfPage3Ref} className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
             <h2 className="text-xl font-black text-slate-800">綜合評估與簽核</h2>
           </div>
           <div className="grid grid-cols-2 gap-4 flex-1">
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">業務面評估</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_business || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">技術面評估</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_technical || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">成效追蹤指標 (KPI)</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_kpi || '無'}</span></div>
-            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">綜合評估結論</span><span className="text-sm whitespace-pre-wrap">{projectData.eval_conclusion || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">業務面評估</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_business || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">技術面評估</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_technical || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">成效追蹤指標 (KPI)</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_kpi || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">綜合評估結論</span><span className="text-sm whitespace-pre-wrap">{projectData?.eval_conclusion || '無'}</span></div>
           </div>
           
           <div className="border-2 border-black mt-4">
