@@ -9,10 +9,8 @@ import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Im
 import { toPng } from 'html-to-image'; 
 import jsPDF from 'jspdf';
 
-// 提案單位清單 (已加入作業服務總部)
 const DEPARTMENTS = ['未指定', '作業服務總部', '應用科', '企劃科', '科技科', '智慧金融處', '資訊處', '業務部', '永續發展部'];
 
-// 將圖片轉為 Base64 以繞過 html-to-image 跨域限制
 const fetchImageAsBase64 = async (url: string | null | undefined): Promise<string> => {
   if (!url) return ''; 
   if (url.startsWith('data:image')) return url; 
@@ -100,24 +98,6 @@ export default function ProjectEvaluationPage() {
       }
     }
     fetchAllData();
-
-    // 啟動即時監聽 (Realtime) 以處理共編鎖定
-    const lockSubscription = supabase.channel('locks')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'm01_edit_locks', filter: `project_id=eq.${projectId}` }, payload => {
-        setLocks(prev => {
-          const newLocks = { ...prev };
-          if (payload.eventType === 'DELETE') {
-            delete newLocks[payload.old.field_name];
-          } else {
-            newLocks[payload.new.field_name] = payload.new;
-          }
-          return newLocks;
-        });
-      }).subscribe();
-
-    return () => {
-      supabase.removeChannel(lockSubscription);
-    };
   }, [projectId]);
 
   const saveProjectToDB = async (updates: any) => {
@@ -155,7 +135,7 @@ export default function ProjectEvaluationPage() {
   };
 
   const handleUnlockAll = async () => {
-    if (!confirm('確定解除全站所有人的編輯鎖定嗎？')) return;
+    if (!confirm('確定解除所有鎖定？')) return;
     await supabase.from('m01_edit_locks').delete().eq('project_id', projectId);
     setLocks({});
   };
@@ -180,37 +160,26 @@ export default function ProjectEvaluationPage() {
     await saveProjectToDB({ team_members: { ...currentTeam, [activeDept]: newDeptUsers } });
   };
 
-  // 🚀 PDF 產出邏輯 (A4 橫式, html-to-image)
   const handleExportPDF = async () => {
     setIsExporting(true);
     setTimeout(async () => {
       try {
-        const pdf = new jsPDF('landscape', 'mm', 'a4'); // A4 橫式 (Landscape)
-        const pdfWidth = 297; 
+        const pdf = new jsPDF('portrait', 'mm', 'a4'); // 改為直式 A4，以符合公文格式
+        const pdfWidth = 210; 
         const pages = [pdfPage1Ref.current, pdfPage2Ref.current, pdfPage3Ref.current];
-        
         for (let i = 0; i < pages.length; i++) {
           const element = pages[i];
           if (!element) continue;
-          
-          const imgData = await toPng(element, { 
-            pixelRatio: 2, 
-            backgroundColor: '#ffffff'
-          });
-          
+          const imgData = await toPng(element, { pixelRatio: 2, backgroundColor: '#ffffff' });
           const pdfHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
           if (i > 0) pdf.addPage();
           pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
         }
-        
         pdf.save(`${projectData?.project_code || '專案'}_綜合評估報告.pdf`);
       } catch (error) {
-        console.error(error);
-        alert('匯出 PDF 時發生錯誤。');
-      } finally { 
-        setIsExporting(false); 
-      }
-    }, 500); // 確保圖表有時間渲染
+        alert('匯出 PDF 時發生錯誤');
+      } finally { setIsExporting(false); }
+    }, 300); 
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-[#00457C]" /></div>;
@@ -220,7 +189,7 @@ export default function ProjectEvaluationPage() {
   const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
   const completeness = Math.round((completedGrids / totalGrids) * 100);
 
-  // === 網頁專用彩色 GridBlock UI (北富銀風格) ===
+  // --- 網頁專用的彩色 Grid UI (不影響 PDF) ---
   const GridBlock = ({ title, dbField, type = 'textarea' }: { title: string, dbField: string, type?: 'textarea' | 'image' }) => {
     const isEditing = editingField === dbField;
     const isCompleted = confirmedFields[dbField];
@@ -268,7 +237,7 @@ export default function ProjectEvaluationPage() {
               ) : type === 'image' ? (
                  <div className="py-12 flex flex-col items-center justify-center bg-slate-50 border-2 border-dashed border-slate-200 rounded m-2">
                     <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
-                    <span className="text-xs font-bold text-slate-400">尚未上傳架構圖</span>
+                    <span className="text-xs font-bold text-slate-400">尚未上傳系統架構圖</span>
                  </div>
               ) : value || '尚未填入評估資訊...'}
             </div>
@@ -337,8 +306,6 @@ export default function ProjectEvaluationPage() {
 
       {/* --- 網頁主內容區 --- */}
       <div className="max-w-[1600px] mx-auto w-full px-6 py-8 flex flex-col gap-10">
-        
-        {/* 第 2 層：專案負責人 */}
         <section className="bg-white rounded-lg p-6 shadow-sm border border-slate-200">
           <h2 className="text-sm font-black text-[#00457C] mb-5 flex items-center gap-2"><Lock className="w-4 h-4"/> 專案權責指派編制</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -346,7 +313,7 @@ export default function ProjectEvaluationPage() {
               <div key={dept} className="flex flex-col p-4 bg-slate-50/80 border border-slate-100 rounded">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-xs font-black text-slate-500 uppercase tracking-wider">{dept}</span>
-                  <button onClick={() => openUserModal(dept)} className="text-[10px] font-bold bg-[#00457C] text-white px-2.5 py-1 rounded hover:bg-[#003560] flex items-center gap-1 transition-colors"><UserPlus className="w-3 h-3"/> 指派</button>
+                  <button onClick={() => openUserModal(dept)} className="text-[10px] font-black bg-[#00457C] text-white px-2.5 py-1 rounded hover:bg-[#003560] flex items-center gap-1 transition-colors"><UserPlus className="w-3 h-3"/> 指派</button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(projectData.team_members?.[dept] || []).length > 0 ? 
@@ -362,35 +329,30 @@ export default function ProjectEvaluationPage() {
           </div>
         </section>
 
-        {/* 第 3 層 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <GridBlock title="現行工作職掌與工作流程" dbField="workflow_text" />
-          <GridBlock title="現行作業痛點" dbField="pain_points_text" />
+          <GridBlock title="現行作業痛點需求" dbField="pain_points_text" />
         </div>
 
-        {/* 第 4 層 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <GridBlock title="影響範圍 - 人員" dbField="impact_people_text" />
           <GridBlock title="影響範圍 - 時間" dbField="impact_time_text" />
           <GridBlock title="影響範圍 - 效益" dbField="impact_benefit_text" />
         </div>
 
-        {/* 第 5 層：左右滿版 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <GridBlock title="現行系統架構圖 (AS-IS)" dbField="AS-IS" type="image" />
-          <GridBlock title="未來系統架構圖 (TO-BE)" dbField="TO-BE" type="image" />
+          <GridBlock title="未來規劃系統架構圖 (TO-BE)" dbField="TO-BE" type="image" />
         </div>
 
-        {/* 第 6 層 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <GridBlock title="業務面評估" dbField="eval_business" />
-          <GridBlock title="技術面評估" dbField="eval_technical" />
-          <GridBlock title="成效追蹤指標 (KPI)" dbField="eval_kpi" />
-          <GridBlock title="綜合評估結論" dbField="eval_conclusion" />
+          <GridBlock title="業務可行性評估" dbField="eval_business" />
+          <GridBlock title="技術可行性評估" dbField="eval_technical" />
+          <GridBlock title="專案成效追蹤指標 (KPI)" dbField="eval_kpi" />
+          <GridBlock title="評估委員會綜合結論" dbField="eval_conclusion" />
         </div>
       </div>
 
-      {/* Admin 解除鎖定按鈕 */}
       {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && (
         <div className="fixed bottom-8 right-8 z-50">
           <button onClick={handleUnlockAll} className="bg-rose-600 text-white p-4 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:bg-rose-700 hover:scale-105 transition-all">
@@ -399,7 +361,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 人員選擇 Modal */}
       {isUserModalOpen && (
         <div className="fixed inset-0 bg-[#00457C]/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-lg w-full max-w-md shadow-2xl overflow-hidden flex flex-col border border-slate-200">
@@ -425,118 +386,113 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 🚀 隱藏的 PDF 專用排版區塊 (完全還原富邦公文格式 / 橫式 A4)                 */}
-      {/* ========================================================================= */}
-      <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
+      {/* 🚀 隱藏 PDF 區塊 (完全比照上傳的 PDF 檔案排版) */}
+      <div className="absolute left-[-9999px] top-0 bg-white">
         
-        {/* PDF 共用標題元件 */}
+        {/* PDF 頁面共用標題元件 */}
         {(() => {
           const PDFHeader = ({ pageNum }: { pageNum: number }) => (
-            <div className="w-full mb-6 flex flex-col">
-              <div className="text-center text-slate-400 font-mono text-sm tracking-widest mb-4">--- PAGE {pageNum} ---</div>
-              <div className="text-center text-2xl font-black mb-4">{projectData?.name} - 綜合評估報告</div>
-              <div className="text-center text-sm font-bold border-b border-black pb-4">
+            <div className="w-full mb-6">
+              <div className="text-center text-slate-400 font-mono tracking-widest mb-4">--- PAGE {pageNum} ---</div>
+              <div className="text-center text-xl font-bold mb-4">{projectData?.name} - 綜合評估報告</div>
+              <div className="text-center text-sm font-bold text-slate-600 border-b-2 border-black pb-4">
                 專案編號: {projectData?.project_code} | 提案單位: {projectData?.department || '未指定'}
               </div>
             </div>
           );
 
-          // A4 橫式像素大小 (297mm x 210mm, 假設 96dpi 約為 1122x793)
-          const PAGE_CLASS = "w-[1122px] h-[793px] p-[15mm] bg-white flex flex-col box-border";
-
           return (
             <>
-              {/* === PAGE 1 (第 2,3,4 層) === */}
-              <div ref={pdfPage1Ref} className={PAGE_CLASS}>
+              {/* === PAGE 1 === */}
+              <div ref={pdfPage1Ref} className="w-[794px] h-[1123px] p-[20mm] bg-white flex flex-col font-serif">
                 <PDFHeader pageNum={1} />
                 
-                <div className="grid grid-cols-3 gap-6 mb-6">
+                <div className="grid grid-cols-3 gap-4 mb-6">
                   {['應用科', '企劃科', '科技科'].map(dept => (
                     <div key={dept} className="flex flex-col">
-                      <span className="font-bold text-base mb-2">{dept}負責人</span>
-                      <span className="text-base text-slate-800">{(projectData?.team_members?.[dept] || []).join(', ') || '無'}</span>
+                      <span className="font-bold text-sm mb-1">{dept}負責人</span>
+                      <span className="text-sm text-slate-700">{(projectData?.team_members?.[dept] || []).join(', ') || '未指派'}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 gap-6 mb-6 flex-1">
-                  <div className="flex flex-col h-full">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">現行工作職掌與工作流程</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.workflow_text || '無'}</div>
+                <div className="flex flex-col gap-6 flex-1">
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">現行工作職掌與工作流程</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.workflow_text || '無'}</div>
                   </div>
-                  <div className="flex flex-col h-full">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">現行作業痛點</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.pain_points_text || '無'}</div>
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">現行作業痛點</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.pain_points_text || '無'}</div>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-6 flex-1 border-t border-black pt-6">
-                  <div className="flex flex-col h-full">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">影響範圍 - 人員</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.impact_people_text || '無'}</div>
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">影響範圍 - 人員</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.impact_people_text || '無'}</div>
                   </div>
-                  <div className="flex flex-col h-full">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">影響範圍 - 時間</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.impact_time_text || '無'}</div>
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">影響範圍 - 時間</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.impact_time_text || '無'}</div>
                   </div>
-                  <div className="flex flex-col h-full">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">影響範圍 - 效益</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap flex-1">{projectData?.impact_benefit_text || '無'}</div>
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">影響範圍 - 效益</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.impact_benefit_text || '無'}</div>
                   </div>
                 </div>
               </div>
 
-              {/* === PAGE 2 (第 5 層 AS-IS / TO-BE) === */}
-              <div ref={pdfPage2Ref} className={PAGE_CLASS}>
+              {/* === PAGE 2 === */}
+              <div ref={pdfPage2Ref} className="w-[794px] h-[1123px] p-[20mm] bg-white flex flex-col font-serif">
                 <PDFHeader pageNum={2} />
-                <div className="font-bold text-xl mb-4 text-center">系統架構圖 (AS-IS / TO-BE)</div>
-                <div className="grid grid-cols-2 gap-8 flex-1 h-full pb-4">
-                  <div className="flex flex-col border border-black p-2 h-full">
-                    <div className="font-bold text-lg text-center border-b border-black pb-2 mb-2 bg-slate-100">現行系統架構 (AS-IS)</div>
-                    <div className="flex-1 flex items-center justify-center">
-                      {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-[500px] object-contain" /> : <span className="text-slate-400">無圖片</span>}
+                
+                <div className="font-bold text-lg mb-6 text-center">系統架構圖 (AS-IS / TO-BE)</div>
+                
+                <div className="flex flex-col gap-8 flex-1">
+                  <div className="flex flex-col gap-2">
+                    <div className="font-bold text-md border-b border-black pb-1">現行系統架構 (AS-IS)</div>
+                    <div className="flex-1 min-h-[300px] border border-slate-300 p-2 flex items-center justify-center">
+                      {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-full object-contain" /> : <span className="text-slate-400">無圖片</span>}
                     </div>
                   </div>
-                  <div className="flex flex-col border border-black p-2 h-full">
-                    <div className="font-bold text-lg text-center border-b border-black pb-2 mb-2 bg-slate-100">未來系統架構 (TO-BE)</div>
-                    <div className="flex-1 flex items-center justify-center">
-                      {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-[500px] object-contain" /> : <span className="text-slate-400">無圖片</span>}
+                  
+                  <div className="flex flex-col gap-2">
+                    <div className="font-bold text-md border-b border-black pb-1">未來系統架構 (TO-BE)</div>
+                    <div className="flex-1 min-h-[300px] border border-slate-300 p-2 flex items-center justify-center">
+                      {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-full object-contain" /> : <span className="text-slate-400">無圖片</span>}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* === PAGE 3 (第 6 層 + 簽核流程) === */}
-              <div ref={pdfPage3Ref} className={PAGE_CLASS}>
+              {/* === PAGE 3 === */}
+              <div ref={pdfPage3Ref} className="w-[794px] h-[1123px] p-[20mm] bg-white flex flex-col font-serif">
                 <PDFHeader pageNum={3} />
-                <div className="font-bold text-xl mb-4 text-center">綜合評估與簽核</div>
                 
-                <div className="grid grid-cols-2 gap-x-8 gap-y-6 flex-1 mb-6">
-                  <div className="flex flex-col">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">業務面評估</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_business || '無'}</div>
+                <div className="font-bold text-lg mb-6 text-center">綜合評估與簽核</div>
+
+                <div className="flex flex-col gap-6 flex-1">
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">業務面評估</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.eval_business || '無'}</div>
                   </div>
-                  <div className="flex flex-col">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">技術面評估</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_technical || '無'}</div>
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">技術面評估</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.eval_technical || '無'}</div>
                   </div>
-                  <div className="flex flex-col border-t border-black pt-4">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">成效追蹤指標 (KPI)</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_kpi || '無'}</div>
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">成效追蹤指標 (KPI)</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.eval_kpi || '無'}</div>
                   </div>
-                  <div className="flex flex-col border-t border-black pt-4">
-                    <div className="font-bold text-lg border-b border-black pb-1 mb-2">綜合評估結論</div>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap">{projectData?.eval_conclusion || '無'}</div>
+                  <div>
+                    <div className="font-bold text-md border-b border-black pb-1 mb-2">綜合評估結論</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{projectData?.eval_conclusion || '無'}</div>
                   </div>
                 </div>
 
-                {/* 簽核表單固定在底部 */}
-                <div className="border border-black mt-auto">
-                  <div className="grid grid-cols-6 w-full h-[150px]">
-                    {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
-                      <div key={idx} className={`flex flex-col ${idx !== 5 ? 'border-r border-black' : ''}`}>
-                        <div className="border-b border-black py-2 text-center text-sm font-bold bg-slate-100">{role}</div>
+                <div className="border border-black mt-8">
+                  <div className="grid grid-cols-6 w-full">
+                    {['需求單位經辦', '需求單位科主管', '需求單位主管', '智金處經辦', '智金處科主管', '智金處主管'].map((role, idx) => (
+                      <div key={idx} className={`flex flex-col h-[120px] ${idx !== 5 ? 'border-r border-black' : ''}`}>
+                        <div className="border-b border-black py-2 text-center text-xs font-bold">{role}</div>
                         <div className="flex-1 bg-white"></div>
                       </div>
                     ))}
@@ -549,4 +505,4 @@ export default function ProjectEvaluationPage() {
       </div>
     </div>
   );
-}
+} 
