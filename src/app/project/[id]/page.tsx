@@ -14,24 +14,19 @@ export default function ProjectEvaluationPage() {
   const router = useRouter();
   const projectId = params.id as string;
 
-  // 使用者狀態
   const [currentUser, setCurrentUser] = useState<any>(null);
-
-  // 資料狀態
   const [projectData, setProjectData] = useState<any>(null);
   const [statusDict, setStatusDict] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [images, setImages] = useState<Record<string, string>>({}); 
   const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false); // PDF 輸出狀態
+  const [isExporting, setIsExporting] = useState(false); 
 
-  // 共編與鎖定狀態 (m01_edit_locks / m01_edit_drafts)
   const [locks, setLocks] = useState<Record<string, any>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingField, setEditingField] = useState<string | null>(null);
   const [confirmedFields, setConfirmedFields] = useState<Record<string, boolean>>({});
 
-  // 人員選擇 Modal 狀態
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [activeDept, setActiveDept] = useState<string>('');
 
@@ -81,7 +76,6 @@ export default function ProjectEvaluationPage() {
     }
     fetchAllData();
 
-    // 即時監聽鎖定狀態
     const lockSubscription = supabase.channel('locks')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'm01_edit_locks', filter: `project_id=eq.${projectId}` }, payload => {
         setLocks(prev => {
@@ -180,25 +174,24 @@ export default function ProjectEvaluationPage() {
     await saveProjectToDB({ team_members: newTeam });
   };
 
-  // 🚀 全新 PDF 產出邏輯 (真實產出檔案，A4橫式三頁)
+  // 🚀 背景無感 PDF 產出邏輯
   const handleExportPDF = async () => {
     setIsExporting(true);
-    // 稍微延遲讓 React 渲染出「隱藏的簽核表單」
+    
     setTimeout(async () => {
       try {
         const pdf = new jsPDF('landscape', 'mm', 'a4');
         const pdfWidth = 297; 
         
-        const pages = ['pdf-page-1', 'pdf-page-2', 'pdf-page-3'];
+        const pages = ['hidden-pdf-page-1', 'hidden-pdf-page-2', 'hidden-pdf-page-3'];
+        
         for (let i = 0; i < pages.length; i++) {
           const element = document.getElementById(pages[i]);
           if (!element) continue;
 
-          // 截圖轉換
           const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
           const imgData = canvas.toDataURL('image/png');
           
-          // 計算比例填滿 A4 寬度
           const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
           if (i > 0) pdf.addPage();
@@ -222,26 +215,27 @@ export default function ProjectEvaluationPage() {
   const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
   const completeness = Math.round((completedGrids / totalGrids) * 100);
 
-  // --- 共用的格子 UI 元件 ---
-  const GridBlock = ({ title, dbField, type = 'textarea', heightClass = 'min-h-[250px]' }: { title: string, dbField: string, type?: 'textarea' | 'image', heightClass?: string }) => {
+  // --- 共用的格子 UI 元件 (網頁顯示用) ---
+  const GridBlock = ({ title, dbField, type = 'textarea', heightClass = 'min-h-[200px]' }: { title: string, dbField: string, type?: 'textarea' | 'image', heightClass?: string }) => {
     const isEditing = editingField === dbField;
     const isCompleted = confirmedFields[dbField];
     const value = projectData[dbField] || '';
     const isLockedByOther = locks[dbField] && locks[dbField].user_id !== currentUser?.id;
 
     return (
-      <div className={`flex flex-col bg-white border ${isCompleted ? 'border-emerald-500 shadow-emerald-50' : isEditing ? 'border-indigo-500 shadow-md ring-1 ring-indigo-500' : 'border-slate-200'} rounded-xl shadow-sm overflow-hidden transition-all ${heightClass}`}>
-        <div className={`px-4 py-3 flex items-center justify-between border-b ${isCompleted ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+      // 🚀 將 border 預設為翡翠綠，除非在編輯中才會變藍
+      <div className={`flex flex-col bg-white border ${isCompleted ? 'border-emerald-500 shadow-emerald-50' : isEditing ? 'border-indigo-500 shadow-md ring-1 ring-indigo-500' : 'border-emerald-500'} rounded-xl shadow-sm overflow-hidden transition-all ${heightClass}`}>
+        <div className={`px-4 py-3 flex items-center justify-between border-b ${isCompleted ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-emerald-200'}`}>
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${isCompleted ? 'bg-emerald-500' : isLockedByOther ? 'bg-rose-500' : isEditing ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300'}`}></span>
             <h3 className="text-sm font-black text-slate-800">{title}</h3>
           </div>
-          <div className="flex gap-2" data-html2canvas-ignore="true">
+          <div className="flex gap-2">
             {isLockedByOther ? (
               <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded flex items-center gap-1"><Lock className="w-3 h-3"/> {locks[dbField].user_name} 編輯中</span>
             ) : (
               <>
-                {!isEditing && !isCompleted && !isExporting && (
+                {!isEditing && !isCompleted && (
                   <button onClick={() => handleEdit(dbField, value)} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded flex items-center gap-1"><Edit3 className="w-3.5 h-3.5"/> 編輯</button>
                 )}
                 {isCompleted && (
@@ -259,34 +253,34 @@ export default function ProjectEvaluationPage() {
                 value={drafts[dbField] !== undefined ? drafts[dbField] : value} 
                 onChange={(e) => setDrafts({...drafts, [dbField]: e.target.value})}
                 className="w-full flex-1 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-indigo-500 resize-none"
-                data-html2canvas-ignore="true"
               />
             ) : null
           ) : (
             <div className={`flex-1 flex ${type==='image'? 'items-center justify-center bg-slate-50/50 rounded-lg border border-slate-100' : ''} text-sm whitespace-pre-wrap ${value || images[dbField] ? 'text-slate-700' : 'text-slate-400 italic'}`}>
+              {/* 🚀 圖片區塊的圖片改為 max-h-[150px] 以符合減半高度 */}
               {type === 'image' && images[dbField] ? (
-                 <img src={images[dbField]} className="max-w-full max-h-full object-contain" alt={title}/> 
+                 <img src={images[dbField]} className="max-w-full max-h-[150px] object-contain" alt={title}/> 
               ) : type === 'image' ? (
                  <span>尚未上傳圖片</span>
               ) : value || '尚未填寫資料...'}
             </div>
           )}
 
-          {type === 'image' && !isCompleted && !isLockedByOther && !isExporting && (
-             <label className="absolute bottom-4 right-4 cursor-pointer bg-white border border-slate-200 shadow-sm text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-lg flex items-center gap-2" data-html2canvas-ignore="true">
+          {type === 'image' && !isCompleted && !isLockedByOther && (
+             <label className="absolute bottom-4 right-4 cursor-pointer bg-white border border-slate-200 shadow-sm text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-lg flex items-center gap-2">
                <ImageIcon className="w-4 h-4"/> 上傳圖片
                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, dbField as 'AS-IS'|'TO-BE')} />
              </label>
           )}
 
-          <div data-html2canvas-ignore="true">
+          <div>
             {isEditing && (
               <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-slate-100">
                 <button onClick={() => handleCancel(dbField)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-md flex items-center gap-1"><X className="w-3.5 h-3.5"/> 取消</button>
                 <button onClick={() => handleSaveGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-md flex items-center gap-1"><Save className="w-3.5 h-3.5"/> 儲存</button>
               </div>
             )}
-            {!isEditing && !isCompleted && (value || images[dbField]) && !isLockedByOther && !isExporting && (
+            {!isEditing && !isCompleted && (value || images[dbField]) && !isLockedByOther && (
               <div className="flex justify-end mt-2 pt-3 border-t border-slate-100">
                 <button onClick={() => handleCompleteGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 rounded-md flex items-center gap-1"><Check className="w-3.5 h-3.5"/> 標記為完成</button>
               </div>
@@ -298,10 +292,10 @@ export default function ProjectEvaluationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans pb-24">
+    <div className="min-h-screen bg-slate-100 flex flex-col font-sans pb-24 overflow-x-hidden relative">
       
-      {/* 🚀 第一層：頂部固定資訊列 */}
-      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm" data-html2canvas-ignore="true">
+      {/* 頂部固定資訊列 */}
+      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-[1600px] mx-auto px-6 py-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -339,98 +333,57 @@ export default function ProjectEvaluationPage() {
         </div>
       </div>
 
-      <div className="max-w-[1600px] mx-auto w-full px-6 py-8 flex flex-col gap-12">
+      {/* 🚀 網頁可視區域 (一般使用者看到的內容) */}
+      <div className="max-w-[1600px] mx-auto w-full px-6 py-8 flex flex-col gap-6">
         
-        {/* 🚀 PDF 第一頁：1~4 層 */}
-        <div id="pdf-page-1" className="flex flex-col gap-6 bg-slate-100 p-2">
-          
-          <div className="flex items-center gap-3 mb-2" data-html2canvas-ignore="true">
-            <h2 className="text-lg font-black text-slate-800">第一部分：基本資料與影響評估</h2>
-          </div>
-
-          <section className={`bg-white rounded-xl p-6 shadow-sm border ${confirmedFields['team'] ? 'border-emerald-500 shadow-emerald-50' : 'border-slate-200'} flex flex-col gap-4`}>
-            <div className="flex justify-between items-center">
-              <h2 className="text-base font-black text-slate-800 flex items-center gap-2"><Lock className="w-4 h-4 text-slate-400"/> 專案負責人編制</h2>
-              {!isExporting && (
-                 <button onClick={() => handleCompleteGrid('team')} className="text-xs font-bold bg-emerald-500 text-white px-3 py-1.5 rounded-md hover:bg-emerald-600">完成人員編制</button>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {['應用科', '企劃科', '科技科'].map(dept => (
-                <div key={dept} className="flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-sm font-bold text-slate-700">{dept}</span>
-                    {!isExporting && <button onClick={() => openUserModal(dept)} className="text-[10px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-200 flex items-center gap-1"><UserPlus className="w-3 h-3"/> 加入</button>}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(projectData.team_members?.[dept] || []).length > 0 ? 
-                      projectData.team_members[dept].map((name: string) => (
-                        <span key={name} className="text-xs font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-md text-slate-600">{name}</span>
-                      )) : <span className="text-xs text-slate-400">尚未指派</span>
-                    }
-                  </div>
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col gap-4">
+          <h2 className="text-base font-black text-slate-800 flex items-center gap-2"><Lock className="w-4 h-4 text-slate-400"/> 專案負責人編制</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {['應用科', '企劃科', '科技科'].map(dept => (
+              <div key={dept} className="flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm font-bold text-slate-700">{dept}</span>
+                  <button onClick={() => openUserModal(dept)} className="text-[10px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-200 flex items-center gap-1"><UserPlus className="w-3 h-3"/> 加入</button>
                 </div>
-              ))}
-            </div>
-          </section>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <GridBlock title="現行工作職掌與工作流程" dbField="workflow_text" />
-            <GridBlock title="現行作業痛點" dbField="pain_points_text" />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <GridBlock title="影響範圍 - 人員" dbField="impact_people_text" heightClass="min-h-[150px]" />
-            <GridBlock title="影響範圍 - 時間" dbField="impact_time_text" heightClass="min-h-[150px]" />
-            <GridBlock title="影響範圍 - 效益" dbField="impact_benefit_text" heightClass="min-h-[150px]" />
-          </div>
-        </div>
-
-        {/* 🚀 PDF 第二頁：第 5 層 (AS-IS / TO-BE 圖片) */}
-        <div id="pdf-page-2" className="flex flex-col gap-6 bg-slate-100 p-2">
-          <div className="flex items-center gap-3 mb-2" data-html2canvas-ignore="true">
-            <h2 className="text-lg font-black text-slate-800">第二部分：系統架構圖</h2>
-          </div>
-          {/* 圖片區塊高度減半，維持與其他格子一樣的排版，不再超大空白 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <GridBlock title="現行系統架構 (AS-IS)" dbField="AS-IS" type="image" heightClass="min-h-[350px]" />
-            <GridBlock title="未來系統架構 (TO-BE)" dbField="TO-BE" type="image" heightClass="min-h-[350px]" />
-          </div>
-        </div>
-
-        {/* 🚀 PDF 第三頁：第 6 層 + 簽核表 */}
-        <div id="pdf-page-3" className="flex flex-col gap-6 bg-slate-100 p-2">
-          <div className="flex items-center gap-3 mb-2" data-html2canvas-ignore="true">
-            <h2 className="text-lg font-black text-slate-800">第三部分：綜合評估與簽核</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <GridBlock title="業務面評估" dbField="eval_business" />
-            <GridBlock title="技術面評估" dbField="eval_technical" />
-            <GridBlock title="成效追蹤指標 (KPI)" dbField="eval_kpi" />
-            <GridBlock title="綜合評估結論" dbField="eval_conclusion" />
-          </div>
-
-          {/* 🚀 簽核表單：透過 isExporting 控制，只在產出 PDF 的瞬間掛載顯示 */}
-          {isExporting && (
-            <section className="bg-white rounded-2xl p-8 border-2 border-slate-800 mt-8">
-              <h2 className="text-xl font-black text-slate-800 mb-6 text-center tracking-widest">專案簽核流程</h2>
-              <div className="grid grid-cols-6 border-t-2 border-l-2 border-slate-800 w-full">
-                {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
-                  <div key={idx} className="border-r-2 border-b-2 border-slate-800 flex flex-col h-[150px]">
-                    <div className="bg-slate-100 border-b-2 border-slate-800 py-3 px-1 text-center text-sm font-black">{role}</div>
-                    <div className="flex-1 bg-white"></div>
-                  </div>
-                ))}
+                <div className="flex flex-wrap gap-2">
+                  {(projectData.team_members?.[dept] || []).length > 0 ? 
+                    projectData.team_members[dept].map((name: string) => (
+                      <span key={name} className="text-xs font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-md text-slate-600">{name}</span>
+                    )) : <span className="text-xs text-slate-400">尚未指派</span>
+                  }
+                </div>
               </div>
-            </section>
-          )}
+            ))}
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <GridBlock title="現行工作職掌與工作流程" dbField="workflow_text" />
+          <GridBlock title="現行作業痛點" dbField="pain_points_text" />
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <GridBlock title="影響範圍 - 人員" dbField="impact_people_text" heightClass="min-h-[150px]" />
+          <GridBlock title="影響範圍 - 時間" dbField="impact_time_text" heightClass="min-h-[150px]" />
+          <GridBlock title="影響範圍 - 效益" dbField="impact_benefit_text" heightClass="min-h-[150px]" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 🚀 圖片區塊高度減為 min-h-[150px]，並自帶綠框 (GridBlock預設) */}
+          <GridBlock title="現行系統架構 (AS-IS)" dbField="AS-IS" type="image" heightClass="min-h-[150px]" />
+          <GridBlock title="未來系統架構 (TO-BE)" dbField="TO-BE" type="image" heightClass="min-h-[150px]" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <GridBlock title="業務面評估" dbField="eval_business" />
+          <GridBlock title="技術面評估" dbField="eval_technical" />
+          <GridBlock title="成效追蹤指標 (KPI)" dbField="eval_kpi" />
+          <GridBlock title="綜合評估結論" dbField="eval_conclusion" />
+        </div>
       </div>
 
       {/* Admin 強制解除鎖定 */}
-      {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && !isExporting && (
+      {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && (
         <div className="fixed bottom-6 right-6 z-50">
           <button onClick={handleUnlockAll} className="bg-rose-600 text-white px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:bg-rose-700 hover:scale-105 transition-all">
             <Unlock className="w-5 h-5"/> 強制解除所有編輯鎖定
@@ -439,7 +392,7 @@ export default function ProjectEvaluationPage() {
       )}
 
       {/* 人員選擇 Modal */}
-      {isUserModalOpen && !isExporting && (
+      {isUserModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -472,6 +425,59 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-    </div>
-  );
-}
+      {/* 🚀 隱藏的 PDF 生成專用排版區塊 (移出畫面外，完全不干擾網頁) */}
+      <div className="absolute left-[-9999px] top-0 w-[1122px] bg-white text-slate-800 font-sans">
+        
+        {/* PDF 第一頁 (1~4層) */}
+        <div id="hidden-pdf-page-1" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
+          <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
+            <h1 className="text-2xl font-black text-slate-900">{projectData.name} - 綜合評估報告</h1>
+            <div className="text-sm font-bold text-slate-500">專案編號: {projectData.project_code} | 提案單位: {projectData.department}</div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {['應用科', '企劃科', '科技科'].map(dept => (
+              <div key={dept} className="flex flex-col p-3 border-2 border-emerald-500 rounded-lg">
+                <span className="text-sm font-bold mb-2">{dept}負責人</span>
+                <span className="text-sm">{(projectData.team_members?.[dept] || []).join(', ') || '未指派'}</span>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行工作職掌與工作流程</span><span className="text-sm whitespace-pre-wrap">{projectData.workflow_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">現行作業痛點</span><span className="text-sm whitespace-pre-wrap">{projectData.pain_points_text || '無'}</span></div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 人員</span><span className="text-sm whitespace-pre-wrap">{projectData.impact_people_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 時間</span><span className="text-sm whitespace-pre-wrap">{projectData.impact_time_text || '無'}</span></div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="font-bold border-b pb-2 mb-2">影響範圍 - 效益</span><span className="text-sm whitespace-pre-wrap">{projectData.impact_benefit_text || '無'}</span></div>
+          </div>
+        </div>
+
+        {/* PDF 第二頁 (第5層 圖片) - 這裡因為是 PDF 專用，所以圖片可以盡量放大 */}
+        <div id="hidden-pdf-page-2" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
+          <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
+            <h2 className="text-xl font-black text-slate-800">系統架構圖 (AS-IS / TO-BE)</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-6 flex-1">
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col h-[650px]">
+              <span className="font-bold border-b border-emerald-200 pb-2 mb-2 text-emerald-700">現行系統架構 (AS-IS)</span>
+              <div className="flex-1 flex items-center justify-center bg-slate-50">
+                {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-full object-contain" /> : '無圖片'}
+              </div>
+            </div>
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col h-[650px]">
+              <span className="font-bold border-b border-emerald-200 pb-2 mb-2 text-emerald-700">未來系統架構 (TO-BE)</span>
+              <div className="flex-1 flex items-center justify-center bg-slate-50">
+                {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-full object-contain" /> : '無圖片'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* PDF 第三頁 (第6層 + 簽核表) */}
+        <div id="hidden-pdf-page-3" className="w-[1122px] h-[793px] p-8 flex flex-col gap-6 bg-white overflow-hidden">
+          <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-2">
+            <h2 className="text-xl font-black text-slate-800">綜合評估與簽核</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-4 flex-1">
+            <div className="border-2 border-emerald-500 rounded-lg p-4 flex flex-col"><span className="
