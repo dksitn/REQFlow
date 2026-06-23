@@ -9,9 +9,6 @@ import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Im
 import { toPng } from 'html-to-image'; 
 import jsPDF from 'jspdf';
 
-// 提案單位清單
-const DEPARTMENTS = ['未指定', '作業服務總部', '應用科', '企劃科', '科技科', '智慧金融處', '資訊處', '業務部', '永續發展部'];
-
 const fetchImageAsBase64 = async (url: string | null | undefined): Promise<string> => {
   if (!url) return ''; 
   if (url.startsWith('data:image')) return url; 
@@ -38,6 +35,10 @@ export default function ProjectEvaluationPage() {
   const [projectData, setProjectData] = useState<any>(null);
   const [statusDict, setStatusDict] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
+  
+  // 🚀 新增狀態：存放從資料庫抓來的單位清單
+  const [departmentsList, setDepartmentsList] = useState<any[]>([]);
+  
   const [images, setImages] = useState<Record<string, string>>({}); 
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false); 
@@ -54,10 +55,7 @@ export default function ProjectEvaluationPage() {
   // Modal 狀態
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [activeDept, setActiveDept] = useState<string>('');
-  
-  // 🚀 將提案單位改為與指派人員一樣的 Modal
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
-  
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   
@@ -66,7 +64,7 @@ export default function ProjectEvaluationPage() {
   const [pdfPreviewData, setPdfPreviewData] = useState<string[]>([]); 
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
-  // 🚀 Admin 刪除案件的 Modal 狀態
+  // Admin 刪除案件的 Modal 狀態
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -79,12 +77,15 @@ export default function ProjectEvaluationPage() {
           setCurrentUser(profile);
         }
 
-        const [projRes, statRes, usersRes, locksRes, imagesRes] = await Promise.all([
+        // 🚀 在這裡加入查詢 core_units (或你實際建立的單位主檔名稱，此處假設為 core_units)
+        // 若你的資料表叫做 m01_departments，請將下方的 'core_units' 改為 'm01_departments'
+        const [projRes, statRes, usersRes, locksRes, imagesRes, deptsRes] = await Promise.all([
           supabase.from('m01_projects').select('*').eq('id', projectId).single(),
           supabase.from('m01_status_dict').select('*').order('sort_order', { ascending: true }),
           supabase.from('m01_users').select('*'),
           supabase.from('m01_edit_locks').select('*').eq('project_id', projectId),
-          supabase.from('m01_project_assessment_images').select('*').eq('project_id', projectId)
+          supabase.from('m01_project_assessment_images').select('*').eq('project_id', projectId),
+          supabase.from('core_units').select('*').eq('is_active', true).order('display_order', { ascending: true }) // 🚀 抓取啟用中的單位
         ]);
 
         if (projRes.data) {
@@ -95,6 +96,14 @@ export default function ProjectEvaluationPage() {
         }
         if (statRes.data) setStatusDict(statRes.data);
         if (usersRes.data) setUsersList(usersRes.data);
+        
+        // 🚀 寫入單位清單，若資料庫無資料則給予預設防呆
+        if (deptsRes.data && deptsRes.data.length > 0) {
+            setDepartmentsList(deptsRes.data);
+        } else {
+            // 防呆：如果 core_units 沒資料，先塞一個未指定
+            setDepartmentsList([{ unit_id: 'UNKNOWN', unit_name: '未指定' }]);
+        }
 
         if (locksRes.data) {
           const lockMap: Record<string, any> = {};
@@ -151,8 +160,8 @@ export default function ProjectEvaluationPage() {
     setIsTitleEditing(false);
   };
 
-  const selectDepartment = async (dept: string) => {
-    await saveProjectToDB({ department: dept });
+  const selectDepartment = async (deptName: string) => {
+    await saveProjectToDB({ department: deptName });
     setIsDeptModalOpen(false);
   };
 
@@ -186,14 +195,12 @@ export default function ProjectEvaluationPage() {
     setLocks({});
   };
 
-  // 🚀 Admin 專屬：刪除案件
   const handleDeleteProject = async () => {
     if (currentUser?.system_role !== 'admin') return;
     setIsDeleting(true);
     try {
-      // 刪除專案 (如果資料庫有設定 cascade delete，相關的 lock 和 image 也會一併刪除)
       await supabase.from('m01_projects').delete().eq('id', projectId);
-      router.push('/my-projects'); // 刪除後導回清單頁
+      router.push('/my-projects'); 
     } catch (error) {
       console.error('刪除案件失敗:', error);
       alert('刪除失敗，請稍後再試。');
@@ -221,7 +228,6 @@ export default function ProjectEvaluationPage() {
     await saveProjectToDB({ team_members: { ...currentTeam, [activeDept]: newDeptUsers } });
   };
 
-  // 預覽 PDF
   const handlePreviewPDF = async () => {
     setIsExporting(true);
     setPdfPreviewData([]);
@@ -253,7 +259,6 @@ export default function ProjectEvaluationPage() {
     }, 500); 
   };
 
-  // 匯出下載 PDF
   const handleDownloadPDF = () => {
     if (pdfPreviewData.length === 0) return;
     const pdf = new jsPDF('landscape', 'mm', 'a4'); 
@@ -276,7 +281,7 @@ export default function ProjectEvaluationPage() {
   const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
   const completeness = Math.round((completedGrids / totalGrids) * 100);
 
-  // === 網頁 UI (淺藍/淺灰色調) ===
+  // === 網頁 UI ===
   const GridBlock = ({ title, dbField, type = 'textarea' }: { title: string, dbField: string, type?: 'textarea' | 'image' }) => {
     const isEditing = editingField === dbField;
     const isCompleted = confirmedFields[dbField];
@@ -353,7 +358,6 @@ export default function ProjectEvaluationPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-24 overflow-x-hidden relative">
       
-      {/* --- 網頁上方導覽列 --- */}
       <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-[1600px] mx-auto px-6 py-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
@@ -363,14 +367,13 @@ export default function ProjectEvaluationPage() {
                 <div className="flex items-center gap-3 mb-1">
                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded tracking-wider">{projectData.project_code}</span>
                   
-                  {/* 🚀 單位彈出式選擇 Modal 觸發按鈕 */}
+                  {/* 單位彈出式選擇 Modal 觸發按鈕 */}
                   <button onClick={() => setIsDeptModalOpen(true)} className="flex items-center bg-slate-100 rounded px-2.5 py-1 border border-slate-200 hover:bg-slate-200 transition-colors">
                     <Building2 className="w-3 h-3 mr-1.5 text-slate-500" />
                     <span className="text-xs font-bold text-slate-700">{projectData.department || '設定提案單位'}</span>
                   </button>
                 </div>
                 
-                {/* 專案名稱可直接編輯 */}
                 <div className="flex items-center gap-2 group">
                   {isTitleEditing ? (
                     <input 
@@ -393,7 +396,6 @@ export default function ProjectEvaluationPage() {
             </div>
             <div className="flex items-center gap-4">
               
-              {/* 🚀 Admin 專屬：刪除案件按鈕 */}
               {currentUser?.system_role === 'admin' && (
                 <button onClick={() => setIsDeleteModalOpen(true)} className="flex items-center gap-2 px-3 py-2 text-rose-600 text-sm font-bold rounded-lg hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200 mr-2">
                   <Trash2 className="w-4 h-4" /> 刪除此案件
@@ -469,16 +471,14 @@ export default function ProjectEvaluationPage() {
         </div>
       </div>
 
-      {/* 🚀 Admin 解除鎖定按鈕 */}
       {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && (
         <div className="fixed bottom-8 right-8 z-50">
           <button onClick={handleUnlockAll} className="bg-rose-600 text-white p-3.5 rounded-full shadow-xl flex items-center gap-2 text-sm font-bold hover:bg-rose-700 hover:scale-105 transition-all">
-            <Unlock className="w-5 h-5"/> 解除全站編輯鎖定
+            <Unlock className="w-5 h-5"/> 解除編輯鎖定
           </button>
         </div>
       )}
 
-      {/* 🚀 Admin 刪除案件確認 Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col p-6">
@@ -501,7 +501,7 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 單位選擇 Modal */}
+      {/* 🚀 單位選擇 Modal：資料來源改為從資料庫 core_units 動態獲取 */}
       {isDeptModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
@@ -510,9 +510,9 @@ export default function ProjectEvaluationPage() {
               <button onClick={() => setIsDeptModalOpen(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto grid grid-cols-2 gap-3">
-              {DEPARTMENTS.map(dept => (
-                <button key={dept} onClick={() => selectDepartment(dept)} className={`p-3 rounded-lg border text-sm font-bold transition-all text-center ${projectData.department === dept ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}>
-                  {dept}
+              {departmentsList.map(dept => (
+                <button key={dept.unit_id} onClick={() => selectDepartment(dept.unit_name)} className={`p-3 rounded-lg border text-sm font-bold transition-all text-center ${projectData.department === dept.unit_name ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}>
+                  {dept.unit_name}
                 </button>
               ))}
             </div>
@@ -520,7 +520,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 人員選擇 Modal */}
       {isUserModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
@@ -546,7 +545,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 圖片放大檢視 Modal */}
       {zoomedImage && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200] flex flex-col items-center justify-center p-8 animate-in fade-in" onClick={() => setZoomedImage(null)}>
           <button className="absolute top-6 right-6 text-white bg-white/10 hover:bg-white/20 p-2 rounded-full"><X className="w-8 h-8"/></button>
@@ -554,7 +552,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* PDF 預覽與下載 Modal */}
       {isPreviewModalOpen && pdfPreviewData.length > 0 && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex flex-col p-6 animate-in fade-in">
           <div className="flex items-center justify-between bg-white rounded-t-xl px-6 py-4 border-b border-slate-200 shadow-xl">
@@ -575,9 +572,7 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 🚀 隱藏的 PDF 專用排版區塊 (保持不變)                                       */}
-      {/* ========================================================================= */}
+      {/* 隱藏 PDF 區塊 */}
       <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
         
         {(() => {
@@ -605,7 +600,7 @@ export default function ProjectEvaluationPage() {
 
           return (
             <>
-              {/* === PAGE 1 === */}
+              {/* PAGE 1 */}
               <div ref={pdfPage1Ref} className={PAGE_CLASS}>
                 <PDFHeader pageNum={1} title={`${projectData?.name} - 綜合評估報告`} />
                 
@@ -630,7 +625,7 @@ export default function ProjectEvaluationPage() {
                 </div>
               </div>
 
-              {/* === PAGE 2 === */}
+              {/* PAGE 2 */}
               <div ref={pdfPage2Ref} className={PAGE_CLASS}>
                 <PDFHeader pageNum={2} title="系統架構圖 (Current AS-IS / Planned TO-BE)" />
                 <div className="grid grid-cols-2 gap-6 flex-1 h-full pb-4">
@@ -649,7 +644,7 @@ export default function ProjectEvaluationPage() {
                 </div>
               </div>
 
-              {/* === PAGE 3 === */}
+              {/* PAGE 3 */}
               <div ref={pdfPage3Ref} className={PAGE_CLASS}>
                 <PDFHeader pageNum={3} title="綜合評估與核決簽章 (Final Conclusion & Approvals)" />
                 
