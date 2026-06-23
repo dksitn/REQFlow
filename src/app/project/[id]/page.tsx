@@ -77,14 +77,14 @@ export default function ProjectEvaluationPage() {
           setCurrentUser(profile);
         }
 
-        // 🚀 從 m01_departments 動態讀取啟用中的單位清單
+        // 🚀 從 m01_departments 動態讀取單位清單
         const [projRes, statRes, usersRes, locksRes, imagesRes, deptsRes] = await Promise.all([
           supabase.from('m01_projects').select('*').eq('id', projectId).single(),
           supabase.from('m01_status_dict').select('*').order('sort_order', { ascending: true }),
           supabase.from('m01_users').select('*'),
           supabase.from('m01_edit_locks').select('*').eq('project_id', projectId),
           supabase.from('m01_project_assessment_images').select('*').eq('project_id', projectId),
-          supabase.from('m01_departments').select('*').eq('is_active', true).order('display_order', { ascending: true })
+          supabase.from('m01_departments').select('*').order('created_at', { ascending: true }) 
         ]);
 
         if (projRes.data) {
@@ -96,11 +96,11 @@ export default function ProjectEvaluationPage() {
         if (statRes.data) setStatusDict(statRes.data);
         if (usersRes.data) setUsersList(usersRes.data);
         
-        // 🚀 將資料庫取得的單位存入 State，若為空則給予防呆預設值
+        // 🚀 將資料庫取得的單位存入 State
         if (deptsRes.data && deptsRes.data.length > 0) {
             setDepartmentsList(deptsRes.data);
         } else {
-            setDepartmentsList([{ id: 'UNKNOWN', dept_name: '未指定' }]);
+            setDepartmentsList([]);
         }
 
         if (locksRes.data) {
@@ -498,7 +498,7 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 單位選擇 Modal：以動態渲染從資料庫取得的 departmentsList */}
+      {/* 🚀 單位選擇 Modal：確保精確對應資料庫的 name 欄位 */}
       {isDeptModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
@@ -507,11 +507,25 @@ export default function ProjectEvaluationPage() {
               <button onClick={() => setIsDeptModalOpen(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto grid grid-cols-2 gap-3">
-              {departmentsList.map(dept => (
-                <button key={dept.id} onClick={() => selectDepartment(dept.dept_name)} className={`p-3 rounded-lg border text-sm font-bold transition-all text-center ${projectData.department === dept.dept_name ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}>
-                  {dept.dept_name}
-                </button>
-              ))}
+              {departmentsList.map((dept, index) => {
+                // 防呆：確保不論資料表欄位叫什麼，都能顯示文字
+                const displayName = dept.name || dept.dept_name || '未命名單位';
+                const deptId = dept.id || index;
+                const isSelected = projectData?.department === displayName;
+
+                return (
+                  <button 
+                    key={deptId} 
+                    onClick={() => selectDepartment(displayName)} 
+                    className={`p-3 rounded-lg border text-sm font-bold transition-all text-center ${isSelected ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}
+                  >
+                    {displayName}
+                  </button>
+                );
+              })}
+              {departmentsList.length === 0 && (
+                 <div className="col-span-2 text-center text-slate-400 text-sm py-4">查無單位資料</div>
+              )}
             </div>
           </div>
         </div>
