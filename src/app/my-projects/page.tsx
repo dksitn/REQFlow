@@ -58,6 +58,7 @@ export default function MyProjectsPage() {
         ]);
         if (projRes.error) throw projRes.error;
         if (statRes.error) throw statRes.error;
+        
         const myData = (projRes.data || []).filter(proj => {
           if (!loggedInName) return false;
           const team = proj.team_members || {};
@@ -102,7 +103,8 @@ export default function MyProjectsPage() {
     const currentRisk = proj.risk_level || '低';
     const bg = currentRisk === '高' ? 'bg-rose-50 text-rose-600 border-rose-200' : currentRisk === '中' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200';
     return (
-      <select value={currentRisk} onChange={(e) => handleRiskChange(proj.id, e.target.value)} onClick={(e) => e.stopPropagation()} className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm ${bg}`}>
+      // 🚀 修復下拉選單藍框：加入 focus:ring-2 focus:ring-blue-400 focus:relative focus:z-10
+      <select value={currentRisk} onChange={(e) => handleRiskChange(proj.id, e.target.value)} onClick={(e) => e.stopPropagation()} className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent focus:relative focus:z-10 transition-shadow ${bg}`}>
         <option value="低" className="text-emerald-600">低</option>
         <option value="中" className="text-amber-600">中</option>
         <option value="高" className="text-rose-600">高</option>
@@ -132,142 +134,138 @@ export default function MyProjectsPage() {
   });
 
   return (
-    <div className="flex-1 flex flex-col w-full relative font-sans min-h-screen">
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm shrink-0 gap-4">
-        <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight ml-12 md:ml-0 flex items-center gap-2">
-          <Folder className="w-5 h-5 text-indigo-500" /> 我的負責案件
+    <div className="flex-1 flex flex-col w-full relative font-sans min-h-screen bg-slate-50">
+      
+      {/* 頂部導覽列 */}
+      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <Folder className="w-5 h-5 text-blue-500" /> 我的負責案件
         </h1>
-        <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto justify-between md:justify-end">
-          <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 transition-colors w-full md:w-auto shrink-0">
+        <div className="flex items-center gap-6">
+          <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center justify-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-colors">
             <Plus className="w-4 h-4" /> 建立案件
           </button>
-          <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
+          <div className="flex items-center gap-3 pl-6 border-l border-slate-200">
             {currentUserId ? (
-              <div className="flex items-center gap-2 md:gap-3">
-                <div className="flex flex-col items-end hidden md:flex"><span className="text-xs font-black text-slate-800">{currentUserName}</span><span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span></div>
-                <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black border border-indigo-200 text-sm">{currentUserName ? currentUserName.charAt(0) : <UserIcon className="w-4 h-4" />}</div>
-                <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors"><LogOut className="w-4 h-4" /></button>
-              </div>
-            ) : (<button onClick={() => router.push('/auth')} className="text-xs font-bold text-indigo-600">前往登入</button>)}
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 md:px-8 pt-6 md:pt-8 pb-24 max-w-[1600px] mx-auto w-full flex-1 flex flex-col gap-6 md:gap-8 items-start">
-        
-        {/* 🚀 擴充到滿版：確保主內容區塊填滿 */}
-        <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
-          
-          <div className="flex overflow-x-auto gap-2 md:gap-3 cursor-pointer select-none shrink-0 pb-2 custom-scrollbar lg:flex-wrap xl:flex-nowrap">
-            <div onClick={() => setActiveFilter('ALL')} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border ${activeFilter === 'ALL' ? 'ring-2 ring-indigo-500 border-transparent shadow-md' : 'border-slate-100 hover:border-indigo-200'}`}>
-              <div className="flex justify-between w-full items-start">
-                <p className="text-[10px] md:text-xs font-bold text-slate-500 line-clamp-2 leading-tight">我的專案</p>
-                <Folder className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-1" />
-              </div>
-              <p className="text-xl md:text-2xl font-black text-slate-900 mt-1">{projects.length}</p>
-            </div>
-            
-            {statusDict.map((status) => {
-              const count = projects.filter(p => p.status_name_snapshot === status.name).length;
-              const color = colorMap[status.color_key] || colorMap['slate'];
-              const IconComponent = iconMap[status.icon] || Folder;
-              const isActive = activeFilter === status.name;
-              const displayName = status.name.replace('科技科/企劃科', '科技/企劃');
-              return (
-                <div key={status.id} onClick={() => setActiveFilter(status.name)} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border ${isActive ? `ring-2 ${color.ring} border-transparent shadow-md` : `border-slate-100 ${color.border}`}`}>
-                  <div className="flex justify-between w-full items-start">
-                    <p className="text-[10px] md:text-xs font-bold text-slate-500 line-clamp-2 leading-tight">{displayName}</p>
-                    <IconComponent className={`w-3.5 h-3.5 ${color.iconText} shrink-0 ml-1`} />
-                  </div>
-                  <p className={`text-xl md:text-2xl font-black mt-1 ${color.text}`}>{count}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-[400px]">
-            <div className="p-4 md:p-6 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
               <div className="flex items-center gap-3">
-                <h2 className="text-base md:text-lg font-black text-slate-800">
-                  {activeFilter === 'ALL' ? '全部專案' : activeFilter}
-                </h2>
-                <span className="text-xs md:text-sm font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">共 {finalFilteredProjects.length} 筆</span>
+                <div className="flex flex-col items-end">
+                   <span className="text-sm font-bold text-slate-800">{currentUserName}</span>
+                   <span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black border border-blue-200 text-sm">
+                   {currentUserName ? currentUserName.charAt(0) : <UserIcon className="w-4 h-4" />}
+                </div>
+                <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors"><LogOut className="w-4 h-4" /></button>
               </div>
-              <div className="relative w-full md:w-64">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input type="text" placeholder="搜尋專案名稱..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2.5 md:py-2 bg-[#F8FAFC] border rounded-lg text-sm font-bold outline-none focus:border-indigo-500" />
-              </div>
-            </div>
-
-            <div className="flex-1 bg-slate-50/30 rounded-b-2xl">
-              {isLoading ? (
-                <div className="py-20 flex flex-col items-center justify-center text-slate-400"><Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-indigo-500" /><span className="text-sm font-bold">資料載入中...</span></div>
-              ) : finalFilteredProjects.length === 0 ? (
-                <div className="py-20 flex flex-col items-center justify-center text-slate-400"><Folder className="w-12 h-12 mb-3 text-slate-200" /><span className="text-sm font-bold">您目前沒有負責符合條件的專案</span></div>
-              ) : (
-                <>
-                  <div className="md:hidden flex flex-col gap-3 p-4">
-                    {finalFilteredProjects.map((proj) => {
-                      const comp = calculateCompleteness(proj);
-                      const dictObj = statusDict.find(s => s.name === proj.status_name_snapshot);
-                      const badgeColor = dictObj ? colorMap[dictObj.color_key] : colorMap['slate'];
-                      return (
-                        <div key={proj.id} onClick={() => router.push(`/project/${proj.id}`)} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer">
-                          <div className="flex justify-between items-start">
-                            <span className="text-[10px] font-black font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{proj.project_code}</span>
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${badgeColor?.badgeBg} ${badgeColor?.badgeText} ${badgeColor?.badgeBorder}`}>
-                              {proj.status_name_snapshot}
-                            </span>
-                          </div>
-                          <h3 className="text-sm font-black text-slate-800 leading-snug">{proj.name}</h3>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <div className="hidden md:block overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
-                      <thead className="bg-slate-50/80 sticky top-0 z-10">
-                        <tr className="border-b-2 border-slate-100">
-                          <th className="px-6 py-4 text-[11px] font-extrabold text-slate-400 uppercase">專案編號</th>
-                          <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">專案名稱</th>
-                          <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">提案單位</th>
-                          <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">目前狀態</th>
-                          <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase">負責人</th>
-                          <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase w-32">完整度</th>
-                          <th className="px-4 py-4 text-[11px] font-extrabold text-slate-400 uppercase text-center">風險</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {finalFilteredProjects.map((proj) => {
-                          const comp = calculateCompleteness(proj);
-                          const responsibles = getResponsiblesString(proj);
-                          const dictObj = statusDict.find(s => s.name === proj.status_name_snapshot);
-                          const badgeColor = dictObj ? colorMap[dictObj.color_key] : colorMap['slate'];
-                          return (
-                            <tr key={proj.id} onClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-indigo-50/30 cursor-pointer">
-                              <td className="px-6 py-4"><span className="text-[10px] font-black text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded border">{proj.project_code}</span></td>
-                              <td className="px-4 py-4 text-sm font-black text-slate-700 truncate max-w-[250px]">{proj.name}</td>
-                              <td className="px-4 py-4"><span className="text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md">{proj.department || '-'}</span></td>
-                              <td className="px-4 py-4"><span className={`text-[10px] font-black px-2 py-1 rounded-md border ${badgeColor?.badgeBg} ${badgeColor?.badgeText} ${badgeColor?.badgeBorder}`}>{proj.status_name_snapshot}</span></td>
-                              <td className="px-4 py-4"><div className="text-[11px] font-bold text-slate-500 truncate max-w-[150px]">{responsibles}</div></td>
-                              <td className="px-4 py-4"><div className="flex items-center gap-2"><div className="flex-1 bg-slate-100 rounded-full h-1.5"><div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${comp}%` }}></div></div></div></td>
-                              <td className="px-4 py-4 text-center">{getRiskSelector(proj)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
+            ) : (<button onClick={() => router.push('/auth')} className="text-sm font-bold text-blue-600">前往登入</button>)}
           </div>
         </div>
-        
-        {/* 🚀 移除待處理事項 sidebar */}
       </div>
 
+      <div className="px-6 pt-8 pb-24 max-w-[1600px] mx-auto w-full flex-1 flex flex-col gap-8">
+        
+        {/* 狀態過濾卡片 */}
+        <div className="flex gap-4 cursor-pointer select-none shrink-0 overflow-x-auto pb-2">
+          {/* 🚀 卡片加入 tabIndex 與藍色點擊光暈 focus:ring-2 */}
+          <div onClick={() => setActiveFilter('ALL')} tabIndex={0} className={`flex-1 min-w-[120px] bg-white rounded-xl p-4 shadow-sm flex flex-col justify-between transition-all gap-2 border focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${activeFilter === 'ALL' ? 'ring-1 ring-blue-500 border-blue-500 bg-blue-50/20' : 'border-slate-200 hover:border-blue-300'}`}>
+            <div className="flex justify-between items-center w-full">
+              <p className="text-xs font-bold text-slate-500">我的專案</p>
+              <Folder className="w-4 h-4 text-blue-500" />
+            </div>
+            <p className="text-2xl font-black text-slate-900">{projects.length}</p>
+          </div>
+          
+          {statusDict.map((status) => {
+            const count = projects.filter(p => p.status_name_snapshot === status.name).length;
+            const color = colorMap[status.color_key] || colorMap['slate'];
+            const IconComponent = iconMap[status.icon] || Folder;
+            const isActive = activeFilter === status.name;
+            const displayName = status.name.replace('科技科/企劃科', '科技/企劃');
+            return (
+              // 🚀 卡片加入 tabIndex 與藍色點擊光暈 focus:ring-2
+              <div key={status.id} onClick={() => setActiveFilter(status.name)} tabIndex={0} className={`flex-1 min-w-[120px] bg-white rounded-xl p-4 shadow-sm flex flex-col justify-between transition-all gap-2 border focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${isActive ? `ring-1 ${color.ring} ${color.border} ${color.badgeBg}` : `border-slate-200 hover:border-slate-300`}`}>
+                <div className="flex justify-between items-center w-full">
+                  <p className="text-xs font-bold text-slate-500 truncate">{displayName}</p>
+                  <IconComponent className={`w-4 h-4 ${color.iconText}`} />
+                </div>
+                <p className={`text-2xl font-black ${color.text}`}>{count}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 列表與搜尋區域 */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col min-h-[500px]">
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-slate-800">
+                {activeFilter === 'ALL' ? '全部專案清單' : activeFilter}
+              </h2>
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">共 {finalFilteredProjects.length} 筆</span>
+            </div>
+            <div className="relative w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              {/* 🚀 搜尋框加入正確的藍色光暈 */}
+              <input type="text" placeholder="搜尋專案名稱、編號或負責人..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent focus:bg-white transition-colors" />
+            </div>
+          </div>
+
+          {/* 🚀 移除 overflow-hidden，防止下拉選單的藍色 Focus Ring 邊界被切斷 */}
+          <div className="flex-1 bg-white rounded-b-xl relative">
+            {isLoading ? (
+              <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-blue-500" />
+                <span className="text-sm font-bold">資料載入中...</span>
+              </div>
+            ) : finalFilteredProjects.length === 0 ? (
+              <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+                <Folder className="w-12 h-12 mb-3 text-slate-200" />
+                <span className="text-sm font-bold">目前沒有符合條件的專案</span>
+              </div>
+            ) : (
+              <>
+                {/* 🚀 加入 p-[2px] 讓藍色外框有渲染的空間不被捲軸切齊 */}
+                <div className="overflow-x-auto p-[2px]">
+                  <table className="w-full text-left border-collapse whitespace-nowrap">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500">專案編號</th>
+                        <th className="px-4 py-4 text-xs font-bold text-slate-500">專案名稱</th>
+                        <th className="px-4 py-4 text-xs font-bold text-slate-500">提案單位</th>
+                        <th className="px-4 py-4 text-xs font-bold text-slate-500">目前狀態</th>
+                        <th className="px-4 py-4 text-xs font-bold text-slate-500">負責人</th>
+                        <th className="px-4 py-4 text-xs font-bold text-slate-500 w-32">資料完整度</th>
+                        <th className="px-4 py-4 text-xs font-bold text-slate-500 text-center">風險等級</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {finalFilteredProjects.map((proj) => {
+                        const comp = calculateCompleteness(proj);
+                        const responsibles = getResponsiblesString(proj);
+                        const dictObj = statusDict.find(s => s.name === proj.status_name_snapshot);
+                        const badgeColor = dictObj ? colorMap[dictObj.color_key] : colorMap['slate'];
+                        return (
+                          // 🚀 Table Row 加上 tabIndex 與 focus:ring-2 以達到點選發藍光的效果，並提升層級 z-10 防止被下方元素遮擋
+                          <tr key={proj.id} tabIndex={0} onClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-blue-50/50 cursor-pointer transition-colors group focus:outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-400 focus:relative focus:z-10">
+                            <td className="px-6 py-4"><span className="text-[11px] font-bold text-slate-500 font-mono bg-slate-100 px-2.5 py-1 rounded border border-slate-200 group-hover:bg-white">{proj.project_code}</span></td>
+                            <td className="px-4 py-4"><div className="text-sm font-bold text-slate-800 truncate max-w-[280px]">{proj.name}</div></td>
+                            <td className="px-4 py-4"><span className="text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md">{proj.department || '-'}</span></td>
+                            <td className="px-4 py-4"><span className={`text-[10px] font-black px-2 py-1 rounded-md border ${badgeColor?.badgeBg} ${badgeColor?.badgeText} ${badgeColor?.badgeBorder}`}>{proj.status_name_snapshot}</span></td>
+                            <td className="px-4 py-4"><div className="text-[11px] font-bold text-slate-500 truncate max-w-[150px]">{responsibles}</div></td>
+                            <td className="px-4 py-4"><div className="flex items-center gap-2"><div className="flex-1 bg-slate-100 rounded-full h-1.5"><div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${comp}%` }}></div></div></div></td>
+                            <td className="px-4 py-4 text-center">{getRiskSelector(proj)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      
       {isCreateModalOpen && (
         <CreateProjectModal onClose={() => setIsCreateModalOpen(false)} onSuccess={(projectId) => { setIsCreateModalOpen(false); router.push(`/project/${projectId}`); }} />
       )}
