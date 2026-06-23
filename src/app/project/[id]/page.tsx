@@ -36,7 +36,7 @@ export default function ProjectEvaluationPage() {
   const [statusDict, setStatusDict] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   
-  // 🚀 新增狀態：存放從資料庫抓來的單位清單
+  // 🚀 存放從資料庫 m01_departments 抓來的單位清單
   const [departmentsList, setDepartmentsList] = useState<any[]>([]);
   
   const [images, setImages] = useState<Record<string, string>>({}); 
@@ -77,15 +77,14 @@ export default function ProjectEvaluationPage() {
           setCurrentUser(profile);
         }
 
-        // 🚀 在這裡加入查詢 core_units (或你實際建立的單位主檔名稱，此處假設為 core_units)
-        // 若你的資料表叫做 m01_departments，請將下方的 'core_units' 改為 'm01_departments'
+        // 🚀 從 m01_departments 動態讀取啟用中的單位清單
         const [projRes, statRes, usersRes, locksRes, imagesRes, deptsRes] = await Promise.all([
           supabase.from('m01_projects').select('*').eq('id', projectId).single(),
           supabase.from('m01_status_dict').select('*').order('sort_order', { ascending: true }),
           supabase.from('m01_users').select('*'),
           supabase.from('m01_edit_locks').select('*').eq('project_id', projectId),
           supabase.from('m01_project_assessment_images').select('*').eq('project_id', projectId),
-          supabase.from('core_units').select('*').eq('is_active', true).order('display_order', { ascending: true }) // 🚀 抓取啟用中的單位
+          supabase.from('m01_departments').select('*').eq('is_active', true).order('display_order', { ascending: true })
         ]);
 
         if (projRes.data) {
@@ -97,12 +96,11 @@ export default function ProjectEvaluationPage() {
         if (statRes.data) setStatusDict(statRes.data);
         if (usersRes.data) setUsersList(usersRes.data);
         
-        // 🚀 寫入單位清單，若資料庫無資料則給予預設防呆
+        // 🚀 將資料庫取得的單位存入 State，若為空則給予防呆預設值
         if (deptsRes.data && deptsRes.data.length > 0) {
             setDepartmentsList(deptsRes.data);
         } else {
-            // 防呆：如果 core_units 沒資料，先塞一個未指定
-            setDepartmentsList([{ unit_id: 'UNKNOWN', unit_name: '未指定' }]);
+            setDepartmentsList([{ id: 'UNKNOWN', dept_name: '未指定' }]);
         }
 
         if (locksRes.data) {
@@ -119,7 +117,7 @@ export default function ProjectEvaluationPage() {
           setImages(imgMap);
         }
       } catch (error) {
-        console.error('載入失敗', error);
+        console.error('載入資料失敗', error);
       } finally {
         setIsLoading(false);
       }
@@ -367,7 +365,6 @@ export default function ProjectEvaluationPage() {
                 <div className="flex items-center gap-3 mb-1">
                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded tracking-wider">{projectData.project_code}</span>
                   
-                  {/* 單位彈出式選擇 Modal 觸發按鈕 */}
                   <button onClick={() => setIsDeptModalOpen(true)} className="flex items-center bg-slate-100 rounded px-2.5 py-1 border border-slate-200 hover:bg-slate-200 transition-colors">
                     <Building2 className="w-3 h-3 mr-1.5 text-slate-500" />
                     <span className="text-xs font-bold text-slate-700">{projectData.department || '設定提案單位'}</span>
@@ -501,7 +498,7 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 單位選擇 Modal：資料來源改為從資料庫 core_units 動態獲取 */}
+      {/* 🚀 單位選擇 Modal：以動態渲染從資料庫取得的 departmentsList */}
       {isDeptModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
@@ -511,8 +508,8 @@ export default function ProjectEvaluationPage() {
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto grid grid-cols-2 gap-3">
               {departmentsList.map(dept => (
-                <button key={dept.unit_id} onClick={() => selectDepartment(dept.unit_name)} className={`p-3 rounded-lg border text-sm font-bold transition-all text-center ${projectData.department === dept.unit_name ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}>
-                  {dept.unit_name}
+                <button key={dept.id} onClick={() => selectDepartment(dept.dept_name)} className={`p-3 rounded-lg border text-sm font-bold transition-all text-center ${projectData.department === dept.dept_name ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}>
+                  {dept.dept_name}
                 </button>
               ))}
             </div>
