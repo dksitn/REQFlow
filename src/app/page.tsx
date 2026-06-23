@@ -87,7 +87,8 @@ export default function DashboardPage() {
     const currentRisk = proj.risk_level || '低';
     const bg = currentRisk === '高' ? 'bg-rose-50 text-rose-600 border-rose-200' : currentRisk === '中' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200';
     return (
-      <select value={currentRisk} onChange={(e) => handleRiskChange(proj.id, e.target.value)} onClick={(e) => e.stopPropagation()} className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm ${bg}`}>
+      // 🚀 加入 focus:ring-2 與 focus:relative focus:z-10 確保藍框顯示在最上層不被切斷
+      <select value={currentRisk} onChange={(e) => handleRiskChange(proj.id, e.target.value)} onClick={(e) => e.stopPropagation()} className={`text-[10px] font-black border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:shadow-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent focus:relative focus:z-10 transition-shadow ${bg}`}>
         <option value="低" className="text-emerald-600">低</option>
         <option value="中" className="text-amber-600">中</option>
         <option value="高" className="text-rose-600">高</option>
@@ -117,13 +118,13 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="flex-1 flex flex-col w-full relative font-sans min-h-screen">
+    <div className="flex-1 flex flex-col w-full relative font-sans min-h-screen bg-slate-50">
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm shrink-0 gap-4">
         <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight ml-12 md:ml-0 flex items-center gap-2">
           <BarChart2 className="w-5 h-5 text-indigo-500" /> 系統專案總覽
         </h1>
         <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto justify-between md:justify-end">
-          <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 transition-colors w-full md:w-auto shrink-0">
+          <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 transition-colors w-full md:w-auto shrink-0">
             <Plus className="w-4 h-4" /> 建立案件
           </button>
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
@@ -131,20 +132,20 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2 md:gap-3">
                 <div className="flex flex-col items-end hidden md:flex"><span className="text-xs font-black text-slate-800">{currentUserName}</span><span className="text-[10px] font-bold text-slate-400">{currentUserEmail}</span></div>
                 <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black border border-indigo-200 text-sm">{currentUserName ? currentUserName.charAt(0) : <UserIcon className="w-4 h-4" />}</div>
-                <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors"><LogOut className="w-4 h-4" /></button>
+                <button onClick={handleSignOut} title="登出" className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-400 transition-colors"><LogOut className="w-4 h-4" /></button>
               </div>
-            ) : (<button onClick={() => router.push('/auth')} className="text-xs font-bold text-indigo-600">前往登入</button>)}
+            ) : (<button onClick={() => router.push('/auth')} className="text-xs font-bold text-indigo-600 focus:outline-none focus:underline">前往登入</button>)}
           </div>
         </div>
       </div>
 
       <div className="px-4 md:px-8 pt-6 md:pt-8 pb-24 max-w-[1600px] mx-auto w-full flex-1 flex flex-col gap-6 md:gap-8 items-start">
         
-        {/* 🚀 擴充到滿版：將 flex-1 與 w-full 確保主內容區塊填滿 */}
         <div className="flex-1 flex flex-col gap-6 md:gap-8 w-full min-w-0">
           
           <div className="flex overflow-x-auto gap-2 md:gap-3 cursor-pointer select-none shrink-0 pb-2 custom-scrollbar lg:flex-wrap xl:flex-nowrap">
-            <div onClick={() => setActiveFilter('ALL')} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border ${activeFilter === 'ALL' ? 'ring-2 ring-indigo-500 border-transparent shadow-md' : 'border-slate-100 hover:border-indigo-200'}`}>
+            {/* 🚀 卡片加上 tabIndex 與 focus 藍框 */}
+            <div onClick={() => setActiveFilter('ALL')} tabIndex={0} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${activeFilter === 'ALL' ? 'ring-2 ring-indigo-500 border-transparent shadow-md' : 'border-slate-100 hover:border-indigo-200'}`}>
               <div className="flex justify-between w-full items-start">
                 <p className="text-[10px] md:text-xs font-bold text-slate-500 line-clamp-2 leading-tight">全部專案</p>
                 <Folder className="w-3.5 h-3.5 text-indigo-500 shrink-0 ml-1" />
@@ -159,7 +160,8 @@ export default function DashboardPage() {
               const isActive = activeFilter === status.name;
               const displayName = status.name.replace('科技科/企劃科', '科技/企劃');
               return (
-                <div key={status.id} onClick={() => setActiveFilter(status.name)} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border ${isActive ? `ring-2 ${color.ring} border-transparent shadow-md` : `border-slate-100 ${color.border}`}`}>
+                /* 🚀 卡片加上 tabIndex 與 focus 藍框 */
+                <div key={status.id} onClick={() => setActiveFilter(status.name)} tabIndex={0} className={`flex-1 min-w-[100px] bg-white rounded-xl p-3 shadow-sm flex flex-col items-start justify-between transition-all gap-1 border focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent ${isActive ? `ring-2 ${color.ring} border-transparent shadow-md` : `border-slate-100 hover:border-indigo-200 ${color.border}`}`}>
                   <div className="flex justify-between w-full items-start">
                     <p className="text-[10px] md:text-xs font-bold text-slate-500 line-clamp-2 leading-tight">{displayName}</p>
                     <IconComponent className={`w-3.5 h-3.5 ${color.iconText} shrink-0 ml-1`} />
@@ -180,7 +182,8 @@ export default function DashboardPage() {
               </div>
               <div className="relative w-full md:w-64">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input type="text" placeholder="搜尋專案名稱..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2.5 md:py-2 bg-[#F8FAFC] border rounded-lg text-sm font-bold outline-none focus:border-indigo-500" />
+                {/* 🚀 搜尋框加上 focus 藍框 */}
+                <input type="text" placeholder="搜尋專案名稱..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2.5 md:py-2 bg-[#F8FAFC] border border-slate-200 rounded-lg text-sm font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all" />
               </div>
             </div>
 
@@ -197,7 +200,7 @@ export default function DashboardPage() {
                       const dictObj = statusDict.find(s => s.name === proj.status_name_snapshot);
                       const badgeColor = dictObj ? colorMap[dictObj.color_key] : colorMap['slate'];
                       return (
-                        <div key={proj.id} onClick={() => router.push(`/project/${proj.id}`)} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer">
+                        <div key={proj.id} onClick={() => router.push(`/project/${proj.id}`)} tabIndex={0} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all">
                           <div className="flex justify-between items-start">
                             <span className="text-[10px] font-black font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{proj.project_code}</span>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${badgeColor?.badgeBg} ${badgeColor?.badgeText} ${badgeColor?.badgeBorder}`}>
@@ -210,7 +213,8 @@ export default function DashboardPage() {
                     })}
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto custom-scrollbar">
+                  {/* 🚀 加入 p-[2px] 讓藍色外框有渲染的空間不被捲軸切齊 */}
+                  <div className="hidden md:block overflow-x-auto custom-scrollbar p-[2px]">
                     <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
                       <thead className="bg-slate-50/80 sticky top-0 z-10">
                         <tr className="border-b-2 border-slate-100">
@@ -230,10 +234,11 @@ export default function DashboardPage() {
                           const dictObj = statusDict.find(s => s.name === proj.status_name_snapshot);
                           const badgeColor = dictObj ? colorMap[dictObj.color_key] : colorMap['slate'];
                           return (
-                            <tr key={proj.id} onClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-indigo-50/30 cursor-pointer">
-                              <td className="px-6 py-4"><span className="text-[10px] font-black text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded border">{proj.project_code}</span></td>
+                            {/* 🚀 表格列加上 tabIndex 與 focus 藍框，並用 relative z-10 確保外框浮在其他列之上 */}
+                            <tr key={proj.id} tabIndex={0} onClick={() => router.push(`/project/${proj.id}`)} className="hover:bg-indigo-50/30 cursor-pointer transition-colors focus:outline-none focus:bg-indigo-50/50 focus:ring-2 focus:ring-indigo-400 focus:relative focus:z-10 group">
+                              <td className="px-6 py-4"><span className="text-[10px] font-black text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded border group-focus:bg-white transition-colors">{proj.project_code}</span></td>
                               <td className="px-4 py-4 text-sm font-black text-slate-700 truncate max-w-[250px]">{proj.name}</td>
-                              <td className="px-4 py-4"><span className="text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md">{proj.department || '-'}</span></td>
+                              <td className="px-4 py-4"><span className="text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md group-focus:bg-white transition-colors">{proj.department || '-'}</span></td>
                               <td className="px-4 py-4"><span className={`text-[10px] font-black px-2 py-1 rounded-md border ${badgeColor?.badgeBg} ${badgeColor?.badgeText} ${badgeColor?.badgeBorder}`}>{proj.status_name_snapshot}</span></td>
                               <td className="px-4 py-4"><div className="text-[11px] font-bold text-slate-500 truncate max-w-[150px]">{responsibles}</div></td>
                               <td className="px-4 py-4"><div className="flex items-center gap-2"><div className="flex-1 bg-slate-100 rounded-full h-1.5"><div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${comp}%` }}></div></div></div></td>
@@ -250,7 +255,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 🚀 移除原本在 md:sticky md:top-8 的待處理事項區塊 */}
       </div>
 
       {isCreateModalOpen && (
