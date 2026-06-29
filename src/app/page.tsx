@@ -26,6 +26,14 @@ const colorMap: Record<string, { ring: string, text: string, border: string, ico
   slate: { ring: 'ring-slate-500', text: 'text-slate-600', border: 'hover:border-slate-300', iconText: 'text-slate-500', badgeBg: 'bg-slate-50', badgeText: 'text-slate-600', badgeBorder: 'border-slate-200' },
 };
 
+// 🚀 同步個別專案頁的 11 個標準欄位，用於精確計算完成度
+const VALID_EVAL_FIELDS = [
+  'workflow_text', 'pain_points_text', 
+  'impact_people_text', 'impact_time_text', 'impact_benefit_text',
+  'AS-IS', 'TO-BE',
+  'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'
+];
+
 export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
@@ -46,7 +54,9 @@ export default function DashboardPage() {
           setCurrentUserId(user.id);
           setCurrentUserEmail(user.email || '');
           const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
-          setCurrentUserName(profile?.full_name || '');
+          if (profile?.full_name) {
+            setCurrentUserName(profile.full_name);
+          }
         }
         const [projRes, statRes] = await Promise.all([
           supabase.from('m01_projects').select('*').order('created_at', { ascending: false }),
@@ -54,6 +64,8 @@ export default function DashboardPage() {
         ]);
         if (projRes.error) throw projRes.error;
         if (statRes.error) throw statRes.error;
+        
+        // 🚀 修正：系統專案總覽應顯示全部案件，直接放入所有讀取出來的資料
         setProjects(projRes.data || []);
         setStatusDict(statRes.data || []);
       } catch (error) {
@@ -73,9 +85,9 @@ export default function DashboardPage() {
   const calculateCompleteness = (proj: any) => {
     let score = 0;
     const confirmed = proj.confirmed_fields || {};
-    const fields = ['workflow_text', 'as_is_text', 'impact_people_text', 'impact_time_text', 'impact_benefit_text', 'image_as_is', 'image_to_be', 'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'];
-    fields.forEach(f => { if (confirmed[f]) score++; });
-    return Math.round((score / 11) * 100);
+    // 🚀 採用與個別專案頁完全一致的欄位計算邏輯
+    VALID_EVAL_FIELDS.forEach(f => { if (confirmed[f]) score++; });
+    return Math.min(100, Math.round((score / VALID_EVAL_FIELDS.length) * 100));
   };
 
   const handleRiskChange = async (projectId: string, newRisk: string) => {
@@ -97,7 +109,13 @@ export default function DashboardPage() {
 
   const getResponsiblesString = (proj: any) => {
     const team = proj.team_members || {};
-    const all = [...(team['應用科']||[]), ...(team['企劃科']||[]), ...(team['科技科']||[])];
+    // 🚀 包含唯讀檢視者以便搜尋
+    const all = [
+      ...(team['應用科']||[]), 
+      ...(team['企劃科']||[]), 
+      ...(team['科技科']||[]),
+      ...(team['唯讀檢視者']||[])
+    ];
     return all.length > 0 ? all.join(', ') : '未指定';
   };
 
@@ -117,7 +135,7 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="flex-1 flex flex-col w-full relative font-sans min-h-screen">
+    <div className="flex-1 flex flex-col w-full relative font-sans min-h-screen bg-slate-50">
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-4 flex flex-wrap md:flex-nowrap items-center justify-between shadow-sm shrink-0 gap-4">
         <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight ml-12 md:ml-0 flex items-center gap-2">
           <BarChart2 className="w-5 h-5 text-indigo-500" /> 系統專案總覽
