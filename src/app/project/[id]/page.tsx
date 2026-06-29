@@ -69,7 +69,7 @@ export default function ProjectEvaluationPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // 🚀 修正 2: 綁定資料庫真實欄位 as_is_text，移除非資料庫欄位 pain_points_text
+  // 🚀 嚴格綁定 11 個需要評估的欄位，作為完成度的精準計算標準
   const VALID_EVAL_FIELDS = [
     'workflow_text', 'as_is_text', 
     'impact_people_text', 'impact_time_text', 'impact_benefit_text',
@@ -212,13 +212,14 @@ export default function ProjectEvaluationPage() {
     await supabase.from('m01_edit_locks').delete().match({ project_id: projectId, field_name: field });
   };
 
+  // 🚀 設定完成：標記欄位並同步至資料庫
   const handleCompleteGrid = async (field: string) => {
     const newConfirmed = { ...confirmedFields, [field]: true };
     await saveProjectToDB({ confirmed_fields: newConfirmed });
     setConfirmedFields(newConfirmed);
   };
 
-  // 🚀 2. 新增：解除完成狀態 / 重新修改按鈕的邏輯
+  // 🚀 重新修改：解除完成狀態，系統會自動重新計算完整度並扣回比例
   const handleUndoComplete = async (field: string) => {
     const newConfirmed = { ...confirmedFields };
     newConfirmed[field] = false;
@@ -257,7 +258,7 @@ export default function ProjectEvaluationPage() {
         setImages(prev => ({ ...prev, [type]: base64String }));
       } catch (err) {
         console.error('圖片上傳失敗', err);
-        alert('圖片上傳失敗，請確認資料庫 m01_project_assessment_images 欄位格式設定。');
+        alert('圖片上傳失敗，請確認資料庫 m01_project_assessment_images 設定。');
       }
     };
     reader.readAsDataURL(file);
@@ -320,8 +321,9 @@ export default function ProjectEvaluationPage() {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
   if (!projectData) return <div className="p-8 text-center text-red-500 font-bold">找不到專案資料</div>;
 
+  // 🚀 即時計算 11 個框框的完成度
   const totalGrids = VALID_EVAL_FIELDS.length; 
-  const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
+  const completedGrids = VALID_EVAL_FIELDS.filter(k => confirmedFields[k]).length;
   const completeness = Math.min(100, Math.round((completedGrids / totalGrids) * 100));
 
   // === 網頁 UI ===
@@ -349,11 +351,10 @@ export default function ProjectEvaluationPage() {
               <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded border border-rose-100 flex items-center gap-1"><Lock className="w-3 h-3"/> {locks[dbField].user_name} 編輯中</span>
             ) : (
               <>
-                {!isEditing && !isCompleted && (
+                {!isEditing && !isCompleted && type !== 'image' && (
                   <button onClick={() => handleEdit(dbField, value)} className="text-xs font-bold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-blue-50 px-2 py-1 rounded transition-all flex items-center gap-1"><Edit3 className="w-3.5 h-3.5"/> 編輯</button>
                 )}
                 {isCompleted && (
-                  // 🚀 2. 在標記完成後，出現「重新修改」按鈕
                   <div className="flex items-center gap-3">
                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check className="w-4 h-4"/> 已完成</span>
                      <button onClick={() => handleUndoComplete(dbField)} className="text-[11px] font-bold text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded transition-colors flex items-center gap-1">
@@ -393,6 +394,7 @@ export default function ProjectEvaluationPage() {
             </div>
           )}
 
+          {/* 圖片上傳按鈕 (未完成時顯示) */}
           {type === 'image' && !isCompleted && !isLockedByOther && (
              <label className="absolute bottom-4 right-4 cursor-pointer bg-white shadow-sm border border-slate-200 text-xs font-bold text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 focus-within:ring-2 focus-within:ring-blue-400 flex items-center gap-1.5 z-10 transition-all">
                <ImageIcon className="w-3.5 h-3.5"/> 上傳/更換圖片
@@ -400,6 +402,7 @@ export default function ProjectEvaluationPage() {
              </label>
           )}
 
+          {/* 標記為完成按鈕 (包含圖片與文字框，未完成且有資料時顯示) */}
           {!isEditing && !isCompleted && (value || images[dbField]) && !isLockedByOther && (
             <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
               <button onClick={() => handleCompleteGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-1 rounded-lg flex items-center gap-1 transition-all"><Check className="w-3.5 h-3.5"/> 標記為完成</button>
@@ -526,7 +529,6 @@ export default function ProjectEvaluationPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <GridBlock title="現行工作職掌與工作流程" dbField="workflow_text" />
-          {/* 🚀 2. 綁定正確的 as_is_text */}
           <GridBlock title="現行作業痛點需求" dbField="as_is_text" />
         </div>
 
@@ -618,7 +620,6 @@ export default function ProjectEvaluationPage() {
               <button onClick={() => setIsUserModalOpen(false)} className="text-slate-400 hover:text-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-300 rounded"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto flex flex-col gap-2">
-              {/* 🚀 1. 拔除唯讀檢視者例外，所有單位都直接從 m01_users 對應的 department 篩選 */}
               {usersList.filter(u => u.department === activeDept).map(user => {
                 const isSelected = projectData.team_members?.[activeDept]?.includes(user.full_name);
                 return (
@@ -645,23 +646,24 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
+      {/* 🚀 1. 雙圖對照 100% 滿版且不溢出 */}
       {isCompareModalOpen && images['AS-IS'] && images['TO-BE'] && (
         <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[200] flex flex-col p-6 animate-in fade-in">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-6 shrink-0">
             <h2 className="text-white text-xl font-bold flex items-center gap-2"><SplitSquareHorizontal className="w-5 h-5"/> AS-IS / TO-BE 雙圖對照</h2>
             <button onClick={() => setIsCompareModalOpen(false)} className="text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors"><X className="w-6 h-6"/></button>
           </div>
-          <div className="flex-1 flex gap-6 overflow-hidden">
+          <div className="flex-1 min-h-0 flex gap-6 overflow-hidden">
             <div className="flex-1 bg-slate-800 rounded-xl flex flex-col overflow-hidden border border-slate-700">
-               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase">現行架構 (AS-IS)</div>
-               <div className="flex-1 p-4 overflow-auto flex items-center justify-center">
-                  <img src={images['AS-IS']} className="max-w-full object-contain rounded" />
+               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase shrink-0">現行架構 (AS-IS)</div>
+               <div className="flex-1 p-4 min-h-0 flex items-center justify-center overflow-hidden">
+                  <img src={images['AS-IS']} className="max-w-full max-h-full object-contain rounded" />
                </div>
             </div>
             <div className="flex-1 bg-slate-800 rounded-xl flex flex-col overflow-hidden border border-slate-700">
-               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase">未來架構 (TO-BE)</div>
-               <div className="flex-1 p-4 overflow-auto flex items-center justify-center">
-                  <img src={images['TO-BE']} className="max-w-full object-contain rounded" />
+               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase shrink-0">未來架構 (TO-BE)</div>
+               <div className="flex-1 p-4 min-h-0 flex items-center justify-center overflow-hidden">
+                  <img src={images['TO-BE']} className="max-w-full max-h-full object-contain rounded" />
                </div>
             </div>
           </div>
@@ -688,14 +690,14 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
+      {/* 🚀 3. PDF 網頁一致化風格設計 */}
       <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
-        
         {(() => {
           const PDFHeader = ({ pageNum, title }: { pageNum: number, title: string }) => (
-            <div className="w-full mb-6 flex flex-col border-b-[4px] border-[#00457C] pb-3">
+            <div className="w-full mb-6 flex flex-col border-b-[2px] border-slate-200 pb-3">
               <div className="text-center text-slate-400 font-mono text-[10px] tracking-widest mb-3">--- PAGE {pageNum} ---</div>
               <div className="flex items-center justify-between">
-                  <h1 className="text-xl font-black text-[#00457C]">{title}</h1>
+                  <h1 className="text-xl font-black text-slate-800">{title}</h1>
                   <div className="text-right flex flex-col items-end">
                      <span className="text-[10px] font-bold text-slate-500 tracking-widest">綜合評估報告 Assessment Report</span>
                      <span className="text-base font-black text-slate-900">{projectData?.project_code}</span>
@@ -705,13 +707,13 @@ export default function ProjectEvaluationPage() {
           );
 
           const PDFBlock = ({ title, content, colSpan = 1, className = "" }: { title: string, content: string | React.ReactNode, colSpan?: 1 | 2 | 3, className?: string }) => (
-            <div className={`border-2 border-black rounded-lg p-4 bg-white flex flex-col ${colSpan === 2 ? 'col-span-2' : colSpan === 3 ? 'col-span-3' : ''} ${className}`}>
-              <div className="text-sm font-black text-slate-900 border-b border-slate-200 pb-1.5 mb-2">{title}</div>
-              <div className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap flex-1">{content || '（無內容）'}</div>
+            <div className={`border border-slate-200 rounded-lg p-4 bg-white flex flex-col shadow-sm ${colSpan === 2 ? 'col-span-2' : colSpan === 3 ? 'col-span-3' : ''} ${className}`}>
+              <div className="text-sm font-black text-slate-800 border-b border-slate-100 pb-2 mb-3 bg-slate-50 -mx-4 -mt-4 px-4 pt-3 rounded-t-lg">{title}</div>
+              <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap flex-1">{content || '（無內容）'}</div>
             </div>
           );
 
-          const PAGE_CLASS = "w-[1122px] h-[793px] p-[15mm] bg-white flex flex-col box-border border-[6px] border-[#00457C] overflow-hidden";
+          const PAGE_CLASS = "w-[1122px] h-[793px] p-[15mm] bg-white flex flex-col box-border overflow-hidden";
 
           return (
             <>
@@ -721,16 +723,15 @@ export default function ProjectEvaluationPage() {
                 
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   {['應用科', '企劃科', '科技科'].map(dept => (
-                    <div key={dept} className="flex flex-col p-3 border border-black rounded bg-slate-50">
-                      <span className="font-bold text-xs text-slate-500 mb-1">{dept}負責人</span>
-                      <span className="text-sm font-black text-slate-900">{(projectData?.team_members?.[dept] || []).join(', ') || '尚未指派'}</span>
+                    <div key={dept} className="flex flex-col p-3 border border-slate-200 rounded-lg bg-white shadow-sm">
+                      <span className="font-bold text-[10px] text-slate-400 mb-1 tracking-widest uppercase">{dept}負責人</span>
+                      <span className="text-sm font-black text-slate-800">{(projectData?.team_members?.[dept] || []).join(', ') || '尚未指派'}</span>
                     </div>
                   ))}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 flex-1 h-[250px] mb-4">
                    <PDFBlock title="現行工作職掌與工作流程" content={projectData?.workflow_text} />
-                   {/* 🚀 PDF也同步修正為 as_is_text */}
                    <PDFBlock title="現行作業痛點需求" content={projectData?.as_is_text} />
                 </div>
 
@@ -745,15 +746,15 @@ export default function ProjectEvaluationPage() {
               <div ref={pdfPage2Ref} className={PAGE_CLASS}>
                 <PDFHeader pageNum={2} title="系統架構圖 (Current AS-IS / Planned TO-BE)" />
                 <div className="grid grid-cols-2 gap-6 flex-1 h-full pb-4">
-                  <div className="flex flex-col border-[3px] border-[#00457C] rounded-xl overflow-hidden h-full">
-                    <div className="bg-[#00457C] text-white px-4 py-2 text-xs font-black text-center tracking-widest uppercase">現行系統架構圖 (Current AS-IS)</div>
-                    <div className="flex-1 flex items-center justify-center bg-slate-50 p-2 overflow-hidden">
+                  <div className="flex flex-col border border-slate-200 rounded-xl overflow-hidden h-full shadow-sm">
+                    <div className="bg-slate-50 text-slate-700 border-b border-slate-200 px-4 py-3 text-xs font-black text-center tracking-widest uppercase">現行系統架構圖 (Current AS-IS)</div>
+                    <div className="flex-1 flex items-center justify-center bg-white p-4 overflow-hidden">
                       {images['AS-IS'] ? <img src={images['AS-IS']} className="max-w-full max-h-[550px] object-contain" /> : <span className="text-slate-400 text-sm">無圖片</span>}
                     </div>
                   </div>
-                  <div className="flex flex-col border-[3px] border-[#00457C] rounded-xl overflow-hidden h-full">
-                    <div className="bg-[#00457C] text-white px-4 py-2 text-xs font-black text-center tracking-widest uppercase">未來規劃系統架構圖 (Planned TO-BE)</div>
-                    <div className="flex-1 flex items-center justify-center bg-slate-50 p-2 overflow-hidden">
+                  <div className="flex flex-col border border-slate-200 rounded-xl overflow-hidden h-full shadow-sm">
+                    <div className="bg-slate-50 text-slate-700 border-b border-slate-200 px-4 py-3 text-xs font-black text-center tracking-widest uppercase">未來規劃系統架構圖 (Planned TO-BE)</div>
+                    <div className="flex-1 flex items-center justify-center bg-white p-4 overflow-hidden">
                       {images['TO-BE'] ? <img src={images['TO-BE']} className="max-w-full max-h-[550px] object-contain" /> : <span className="text-slate-400 text-sm">無圖片</span>}
                     </div>
                   </div>
@@ -768,14 +769,14 @@ export default function ProjectEvaluationPage() {
                    <PDFBlock title="業務可行性評估" content={projectData?.eval_business} />
                    <PDFBlock title="技術可行性評估" content={projectData?.eval_technical} />
                    <PDFBlock title="專案成效追蹤指標 (KPI)" content={projectData?.eval_kpi} />
-                   <PDFBlock title="綜合評估結論" content={projectData?.eval_conclusion} className="border-[3px] border-[#00457C]"/>
+                   <PDFBlock title="綜合評估結論" content={projectData?.eval_conclusion} className="border-[2px] border-blue-400 bg-blue-50/10"/>
                 </div>
 
-                <div className="border-[2px] border-black mt-auto">
-                  <div className="grid grid-cols-6 w-full h-[100px]">
+                <div className="border border-slate-200 rounded-lg mt-auto overflow-hidden shadow-sm">
+                  <div className="grid grid-cols-6 w-full h-[100px] divide-x divide-slate-200">
                     {['需求單位經辦', '需求單位科主管', '需求單位主管', '智慧金融處經辦', '智慧金融處科主管', '智慧金融處主管'].map((role, idx) => (
-                      <div key={idx} className={`flex flex-col ${idx !== 5 ? 'border-r-2 border-black' : ''}`}>
-                        <div className="border-b-2 border-black py-1.5 text-center text-[10px] font-bold bg-slate-100">{role}</div>
+                      <div key={idx} className="flex flex-col">
+                        <div className="border-b border-slate-200 py-2 text-center text-[10px] font-bold bg-slate-50 text-slate-600">{role}</div>
                         <div className="flex-1 bg-white"></div>
                       </div>
                     ))}
