@@ -69,7 +69,6 @@ export default function ProjectEvaluationPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // 🚀 嚴格綁定 11 個需要評估的欄位，作為完成度的精準計算標準
   const VALID_EVAL_FIELDS = [
     'workflow_text', 'as_is_text', 
     'impact_people_text', 'impact_time_text', 'impact_benefit_text',
@@ -212,14 +211,12 @@ export default function ProjectEvaluationPage() {
     await supabase.from('m01_edit_locks').delete().match({ project_id: projectId, field_name: field });
   };
 
-  // 🚀 設定完成：標記欄位並同步至資料庫
   const handleCompleteGrid = async (field: string) => {
     const newConfirmed = { ...confirmedFields, [field]: true };
     await saveProjectToDB({ confirmed_fields: newConfirmed });
     setConfirmedFields(newConfirmed);
   };
 
-  // 🚀 重新修改：解除完成狀態，系統會自動重新計算完整度並扣回比例
   const handleUndoComplete = async (field: string) => {
     const newConfirmed = { ...confirmedFields };
     newConfirmed[field] = false;
@@ -321,7 +318,6 @@ export default function ProjectEvaluationPage() {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
   if (!projectData) return <div className="p-8 text-center text-red-500 font-bold">找不到專案資料</div>;
 
-  // 🚀 即時計算 11 個框框的完成度
   const totalGrids = VALID_EVAL_FIELDS.length; 
   const completedGrids = VALID_EVAL_FIELDS.filter(k => confirmedFields[k]).length;
   const completeness = Math.min(100, Math.round((completedGrids / totalGrids) * 100));
@@ -394,7 +390,6 @@ export default function ProjectEvaluationPage() {
             </div>
           )}
 
-          {/* 圖片上傳按鈕 (未完成時顯示) */}
           {type === 'image' && !isCompleted && !isLockedByOther && (
              <label className="absolute bottom-4 right-4 cursor-pointer bg-white shadow-sm border border-slate-200 text-xs font-bold text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 focus-within:ring-2 focus-within:ring-blue-400 flex items-center gap-1.5 z-10 transition-all">
                <ImageIcon className="w-3.5 h-3.5"/> 上傳/更換圖片
@@ -402,7 +397,6 @@ export default function ProjectEvaluationPage() {
              </label>
           )}
 
-          {/* 標記為完成按鈕 (包含圖片與文字框，未完成且有資料時顯示) */}
           {!isEditing && !isCompleted && (value || images[dbField]) && !isLockedByOther && (
             <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
               <button onClick={() => handleCompleteGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-1 rounded-lg flex items-center gap-1 transition-all"><Check className="w-3.5 h-3.5"/> 標記為完成</button>
@@ -646,7 +640,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 1. 雙圖對照 100% 滿版且不溢出 */}
       {isCompareModalOpen && images['AS-IS'] && images['TO-BE'] && (
         <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[200] flex flex-col p-6 animate-in fade-in">
           <div className="flex justify-between items-center mb-6 shrink-0">
@@ -655,13 +648,48 @@ export default function ProjectEvaluationPage() {
           </div>
           <div className="flex-1 min-h-0 flex gap-6 overflow-hidden">
             <div className="flex-1 bg-slate-800 rounded-xl flex flex-col overflow-hidden border border-slate-700">
-               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase shrink-0">現行架構 (AS-IS)</div>
+               {/* 🚀 加入標記完成與重新修改按鈕 */}
+               <div className="bg-slate-700 text-slate-300 px-4 py-2 flex items-center justify-between shrink-0">
+                 <span className="text-xs font-bold tracking-widest uppercase">現行架構 (AS-IS)</span>
+                 <div>
+                   {!confirmedFields['AS-IS'] ? (
+                     <button onClick={() => handleCompleteGrid('AS-IS')} className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/50 px-2 py-1 rounded flex items-center gap-1 transition-colors">
+                       <Check className="w-3 h-3"/> 標記為完成
+                     </button>
+                   ) : (
+                     <div className="flex items-center gap-2">
+                       <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1"><Check className="w-3 h-3"/> 已完成</span>
+                       <button onClick={() => handleUndoComplete('AS-IS')} className="text-[10px] font-bold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 px-2 py-1 rounded transition-colors flex items-center gap-1">
+                         <Edit3 className="w-3 h-3" /> 重新修改
+                       </button>
+                     </div>
+                   )}
+                 </div>
+               </div>
                <div className="flex-1 p-4 min-h-0 flex items-center justify-center overflow-hidden">
                   <img src={images['AS-IS']} className="max-w-full max-h-full object-contain rounded" />
                </div>
             </div>
+            
             <div className="flex-1 bg-slate-800 rounded-xl flex flex-col overflow-hidden border border-slate-700">
-               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase shrink-0">未來架構 (TO-BE)</div>
+               {/* 🚀 加入標記完成與重新修改按鈕 */}
+               <div className="bg-slate-700 text-slate-300 px-4 py-2 flex items-center justify-between shrink-0">
+                 <span className="text-xs font-bold tracking-widest uppercase">未來架構 (TO-BE)</span>
+                 <div>
+                   {!confirmedFields['TO-BE'] ? (
+                     <button onClick={() => handleCompleteGrid('TO-BE')} className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/50 px-2 py-1 rounded flex items-center gap-1 transition-colors">
+                       <Check className="w-3 h-3"/> 標記為完成
+                     </button>
+                   ) : (
+                     <div className="flex items-center gap-2">
+                       <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1"><Check className="w-3 h-3"/> 已完成</span>
+                       <button onClick={() => handleUndoComplete('TO-BE')} className="text-[10px] font-bold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 px-2 py-1 rounded transition-colors flex items-center gap-1">
+                         <Edit3 className="w-3 h-3" /> 重新修改
+                       </button>
+                     </div>
+                   )}
+                 </div>
+               </div>
                <div className="flex-1 p-4 min-h-0 flex items-center justify-center overflow-hidden">
                   <img src={images['TO-BE']} className="max-w-full max-h-full object-contain rounded" />
                </div>
@@ -690,7 +718,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 3. PDF 網頁一致化風格設計 */}
       <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
         {(() => {
           const PDFHeader = ({ pageNum, title }: { pageNum: number, title: string }) => (
