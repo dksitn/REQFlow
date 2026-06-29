@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/core/client/supabase';
-import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock, Building2, ZoomIn, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Check, Loader2, FileDown, Lock, Edit3, X, UserPlus, Image as ImageIcon, Unlock, Building2, ZoomIn, Pencil, Trash2, AlertTriangle, ChevronDown, SplitSquareHorizontal } from 'lucide-react';
 import { toPng } from 'html-to-image'; 
 import jsPDF from 'jspdf';
 
@@ -36,7 +36,6 @@ export default function ProjectEvaluationPage() {
   const [statusDict, setStatusDict] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   
-  // 🚀 存放從資料庫 m01_departments 抓來的單位清單
   const [departmentsList, setDepartmentsList] = useState<any[]>([]);
   
   const [images, setImages] = useState<Record<string, string>>({}); 
@@ -58,15 +57,25 @@ export default function ProjectEvaluationPage() {
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
   
-  // 放大圖片與預覽 PDF 狀態
+  // 放大圖片、雙圖對照與預覽 PDF 狀態
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const [pdfPreviewData, setPdfPreviewData] = useState<string[]>([]); 
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
-  // Admin 刪除案件的 Modal 狀態
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // 🚀 修正 2: 綁定資料庫真實欄位 as_is_text，移除非資料庫欄位 pain_points_text
+  const VALID_EVAL_FIELDS = [
+    'workflow_text', 'as_is_text', 
+    'impact_people_text', 'impact_time_text', 'impact_benefit_text',
+    'AS-IS', 'TO-BE',
+    'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'
+  ];
 
   useEffect(() => {
     async function fetchAllData() {
@@ -77,7 +86,6 @@ export default function ProjectEvaluationPage() {
           setCurrentUser(profile);
         }
 
-        // 🚀 從 m01_departments 動態讀取單位清單
         const [projRes, statRes, usersRes, locksRes, imagesRes, deptsRes] = await Promise.all([
           supabase.from('m01_projects').select('*').eq('id', projectId).single(),
           supabase.from('m01_status_dict').select('*').order('sort_order', { ascending: true }),
@@ -90,13 +98,23 @@ export default function ProjectEvaluationPage() {
         if (projRes.data) {
           setProjectData(projRes.data);
           setTitleDraft(projRes.data.name);
-          setConfirmedFields(projRes.data.confirmed_fields || {});
-          if (!projRes.data.team_members) projRes.data.team_members = { '應用科': [], '企劃科': [], '科技科': [] };
+          
+          const rawConfirmed = projRes.data.confirmed_fields || {};
+          const cleanConfirmed: Record<string, boolean> = {};
+          VALID_EVAL_FIELDS.forEach(f => {
+            if (rawConfirmed[f] === true) cleanConfirmed[f] = true;
+          });
+          setConfirmedFields(cleanConfirmed);
+
+          if (!projRes.data.team_members) {
+            projRes.data.team_members = { '應用科': [], '企劃科': [], '科技科': [], '唯讀檢視者': [] };
+          } else if (!projRes.data.team_members['唯讀檢視者']) {
+            projRes.data.team_members['唯讀檢視者'] = [];
+          }
         }
         if (statRes.data) setStatusDict(statRes.data);
         if (usersRes.data) setUsersList(usersRes.data);
         
-        // 🚀 將資料庫取得的單位存入 State
         if (deptsRes.data && deptsRes.data.length > 0) {
             setDepartmentsList(deptsRes.data);
         } else {
@@ -137,7 +155,17 @@ export default function ProjectEvaluationPage() {
         });
       }).subscribe();
 
-    return () => { supabase.removeChannel(lockSubscription); };
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setIsStatusDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => { 
+      supabase.removeChannel(lockSubscription); 
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [projectId]);
 
   const saveProjectToDB = async (updates: any) => {
@@ -147,7 +175,10 @@ export default function ProjectEvaluationPage() {
     } catch (error) {}
   };
 
-  const handleStatusChange = (newStatus: string) => saveProjectToDB({ status_name_snapshot: newStatus });
+  const handleStatusChange = async (newStatus: string) => {
+    setIsStatusDropdownOpen(false);
+    await saveProjectToDB({ status_name_snapshot: newStatus });
+  };
   
   const saveTitle = async () => {
     if (!titleDraft.trim()) {
@@ -187,6 +218,14 @@ export default function ProjectEvaluationPage() {
     setConfirmedFields(newConfirmed);
   };
 
+  // 🚀 2. 新增：解除完成狀態 / 重新修改按鈕的邏輯
+  const handleUndoComplete = async (field: string) => {
+    const newConfirmed = { ...confirmedFields };
+    newConfirmed[field] = false;
+    await saveProjectToDB({ confirmed_fields: newConfirmed });
+    setConfirmedFields(newConfirmed);
+  };
+
   const handleUnlockAll = async () => {
     if (!confirm('確定解除全站所有人的編輯鎖定嗎？')) return;
     await supabase.from('m01_edit_locks').delete().eq('project_id', projectId);
@@ -212,15 +251,21 @@ export default function ProjectEvaluationPage() {
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;
-      await supabase.from('m01_project_assessment_images').upsert({ project_id: projectId, image_type: type, image_url: base64String });
-      setImages(prev => ({ ...prev, [type]: base64String }));
+      try {
+        const { error } = await supabase.from('m01_project_assessment_images').upsert({ project_id: projectId, image_type: type, image_url: base64String });
+        if (error) throw error;
+        setImages(prev => ({ ...prev, [type]: base64String }));
+      } catch (err) {
+        console.error('圖片上傳失敗', err);
+        alert('圖片上傳失敗，請確認資料庫 m01_project_assessment_images 欄位格式設定。');
+      }
     };
     reader.readAsDataURL(file);
   };
 
   const openUserModal = (dept: string) => { setActiveDept(dept); setIsUserModalOpen(true); };
   const toggleUserSelection = async (userName: string) => {
-    const currentTeam = projectData.team_members || { '應用科': [], '企劃科': [], '科技科': [] };
+    const currentTeam = projectData.team_members || { '應用科': [], '企劃科': [], '科技科': [], '唯讀檢視者': [] };
     const deptUsers = currentTeam[activeDept] || [];
     const newDeptUsers = deptUsers.includes(userName) ? deptUsers.filter((n: string) => n !== userName) : [...deptUsers, userName];
     await saveProjectToDB({ team_members: { ...currentTeam, [activeDept]: newDeptUsers } });
@@ -275,9 +320,9 @@ export default function ProjectEvaluationPage() {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
   if (!projectData) return <div className="p-8 text-center text-red-500 font-bold">找不到專案資料</div>;
 
-  const totalGrids = 11; 
+  const totalGrids = VALID_EVAL_FIELDS.length; 
   const completedGrids = Object.keys(confirmedFields).filter(k => confirmedFields[k]).length;
-  const completeness = Math.round((completedGrids / totalGrids) * 100);
+  const completeness = Math.min(100, Math.round((completedGrids / totalGrids) * 100));
 
   // === 網頁 UI ===
   const GridBlock = ({ title, dbField, type = 'textarea' }: { title: string, dbField: string, type?: 'textarea' | 'image' }) => {
@@ -287,48 +332,60 @@ export default function ProjectEvaluationPage() {
     const isLockedByOther = locks[dbField] && locks[dbField].user_id !== currentUser?.id;
 
     return (
-      <div className={`flex flex-col bg-white border ${isCompleted ? 'border-emerald-200' : isEditing ? 'border-blue-400 shadow-md ring-1 ring-blue-400' : 'border-slate-200'} rounded-xl shadow-sm transition-all overflow-hidden`}>
+      <div className={`flex flex-col bg-white border ${isCompleted ? 'border-emerald-200' : isEditing ? 'border-blue-400 shadow-md ring-1 ring-blue-400' : 'border-slate-200'} rounded-xl shadow-sm transition-all overflow-hidden relative`}>
         <div className={`px-5 py-3 flex items-center justify-between border-b ${isCompleted ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
           <div className="flex items-center gap-2">
              <div className={`w-2 h-2 rounded-full ${isCompleted ? 'bg-emerald-500' : isLockedByOther ? 'bg-rose-500' : isEditing ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`}></div>
              <h3 className="text-sm font-bold text-slate-800">{title}</h3>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {type === 'image' && images['AS-IS'] && images['TO-BE'] && !isEditing && (
+               <button onClick={() => setIsCompareModalOpen(true)} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-100 transition-colors flex items-center gap-1 mr-2">
+                  <SplitSquareHorizontal className="w-3.5 h-3.5"/> 雙圖對照
+               </button>
+            )}
+
             {isLockedByOther ? (
               <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded border border-rose-100 flex items-center gap-1"><Lock className="w-3 h-3"/> {locks[dbField].user_name} 編輯中</span>
             ) : (
               <>
                 {!isEditing && !isCompleted && (
-                  <button onClick={() => handleEdit(dbField, value)} className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors flex items-center gap-1"><Edit3 className="w-3.5 h-3.5"/> 編輯</button>
+                  <button onClick={() => handleEdit(dbField, value)} className="text-xs font-bold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-blue-50 px-2 py-1 rounded transition-all flex items-center gap-1"><Edit3 className="w-3.5 h-3.5"/> 編輯</button>
                 )}
                 {isCompleted && (
-                  <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check className="w-4 h-4"/> 已完成</span>
+                  // 🚀 2. 在標記完成後，出現「重新修改」按鈕
+                  <div className="flex items-center gap-3">
+                     <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check className="w-4 h-4"/> 已完成</span>
+                     <button onClick={() => handleUndoComplete(dbField)} className="text-[11px] font-bold text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded transition-colors flex items-center gap-1">
+                       <Edit3 className="w-3 h-3" /> 重新修改
+                     </button>
+                  </div>
                 )}
               </>
             )}
           </div>
         </div>
         
-        <div className="flex-1 flex flex-col p-4 relative group">
+        <div className="flex-1 flex flex-col p-4 relative group min-h-[160px]">
           {isEditing ? (
             type === 'textarea' ? (
-              <div className="flex flex-col gap-3">
-                <textarea value={drafts[dbField] || ''} onChange={(e) => setDrafts({...drafts, [dbField]: e.target.value})} className="w-full min-h-[120px] bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-blue-400 resize-none" />
+              <div className="flex flex-col gap-3 h-full">
+                <textarea value={drafts[dbField] || ''} onChange={(e) => setDrafts({...drafts, [dbField]: e.target.value})} className="flex-1 w-full min-h-[120px] bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none transition-shadow" />
                 <div className="flex justify-end gap-2">
-                   <button onClick={() => handleCancel(dbField)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg">取消</button>
-                   <button onClick={() => handleSaveGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700">儲存</button>
+                   <button onClick={() => handleCancel(dbField)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 rounded-lg transition-all">取消</button>
+                   <button onClick={() => handleSaveGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded-lg transition-all">儲存</button>
                 </div>
               </div>
             ) : null
           ) : (
             <div className={`flex-1 text-sm whitespace-pre-wrap ${value || images[dbField] ? 'text-slate-700' : 'text-slate-400 italic'}`}>
               {type === 'image' && images[dbField] ? (
-                 <div className="relative">
-                   <img src={images[dbField]} className="w-full h-auto block rounded-lg border border-slate-100 cursor-pointer" onClick={() => setZoomedImage(images[dbField])} alt={title}/> 
-                   <button onClick={() => setZoomedImage(images[dbField])} className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><ZoomIn className="w-5 h-5"/></button>
+                 <div className="relative w-full flex justify-center items-center h-full">
+                   <img src={images[dbField]} className="max-w-full max-h-[300px] object-contain rounded-lg border border-slate-100 cursor-pointer" onClick={() => setZoomedImage(images[dbField])} alt={title}/> 
+                   <button onClick={() => setZoomedImage(images[dbField])} className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-white"><ZoomIn className="w-5 h-5"/></button>
                  </div>
               ) : type === 'image' ? (
-                 <div className="py-12 flex flex-col items-center justify-center bg-slate-50 border border-dashed border-slate-300 rounded-lg m-1">
+                 <div className="py-12 flex flex-col items-center justify-center bg-slate-50 border border-dashed border-slate-300 rounded-lg m-1 h-full">
                     <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
                     <span className="text-xs font-bold text-slate-400">尚未上傳圖片</span>
                  </div>
@@ -337,7 +394,7 @@ export default function ProjectEvaluationPage() {
           )}
 
           {type === 'image' && !isCompleted && !isLockedByOther && (
-             <label className="absolute bottom-4 right-4 cursor-pointer bg-white shadow-sm border border-slate-200 text-xs font-bold text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 flex items-center gap-1.5 z-10">
+             <label className="absolute bottom-4 right-4 cursor-pointer bg-white shadow-sm border border-slate-200 text-xs font-bold text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 focus-within:ring-2 focus-within:ring-blue-400 flex items-center gap-1.5 z-10 transition-all">
                <ImageIcon className="w-3.5 h-3.5"/> 上傳/更換圖片
                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, dbField as 'AS-IS'|'TO-BE')} />
              </label>
@@ -345,7 +402,7 @@ export default function ProjectEvaluationPage() {
 
           {!isEditing && !isCompleted && (value || images[dbField]) && !isLockedByOther && (
             <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
-              <button onClick={() => handleCompleteGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg flex items-center gap-1"><Check className="w-3.5 h-3.5"/> 標記為完成</button>
+              <button onClick={() => handleCompleteGrid(dbField)} className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-1 rounded-lg flex items-center gap-1 transition-all"><Check className="w-3.5 h-3.5"/> 標記為完成</button>
             </div>
           )}
         </div>
@@ -360,12 +417,12 @@ export default function ProjectEvaluationPage() {
         <div className="max-w-[1600px] mx-auto px-6 py-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button onClick={() => router.back()} className="p-2 -ml-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
+              <button onClick={() => router.back()} className="p-2 -ml-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
               <div className="flex flex-col">
                 <div className="flex items-center gap-3 mb-1">
                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded tracking-wider">{projectData.project_code}</span>
                   
-                  <button onClick={() => setIsDeptModalOpen(true)} className="flex items-center bg-slate-100 rounded px-2.5 py-1 border border-slate-200 hover:bg-slate-200 transition-colors">
+                  <button onClick={() => setIsDeptModalOpen(true)} className="flex items-center bg-slate-100 rounded px-2.5 py-1 border border-slate-200 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all">
                     <Building2 className="w-3 h-3 mr-1.5 text-slate-500" />
                     <span className="text-xs font-bold text-slate-700">{projectData.department || '設定提案單位'}</span>
                   </button>
@@ -380,32 +437,55 @@ export default function ProjectEvaluationPage() {
                       onChange={(e) => setTitleDraft(e.target.value)} 
                       onBlur={saveTitle}
                       onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
-                      className="text-xl font-bold text-slate-900 border-b-2 border-blue-500 outline-none bg-transparent"
+                      className="text-xl font-bold text-slate-900 border-b-2 border-blue-500 outline-none focus:ring-0 bg-transparent"
                     />
                   ) : (
-                    <h1 className="text-xl font-bold text-slate-900 cursor-pointer hover:text-blue-700 transition-colors" onClick={() => setIsTitleEditing(true)}>
+                    <button onClick={() => setIsTitleEditing(true)} className="text-xl font-bold text-slate-900 cursor-pointer hover:text-blue-700 focus:outline-none focus:text-blue-700 focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 rounded transition-all text-left">
                       {projectData.name}
-                    </h1>
+                    </button>
                   )}
-                  {!isTitleEditing && <button onClick={() => setIsTitleEditing(true)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 p-1"><Pencil className="w-4 h-4"/></button>}
+                  {!isTitleEditing && <button onClick={() => setIsTitleEditing(true)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 p-1 focus:outline-none focus:ring-2 focus:ring-blue-400 rounded transition-all"><Pencil className="w-4 h-4"/></button>}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-4">
               
               {currentUser?.system_role === 'admin' && (
-                <button onClick={() => setIsDeleteModalOpen(true)} className="flex items-center gap-2 px-3 py-2 text-rose-600 text-sm font-bold rounded-lg hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200 mr-2">
+                <button onClick={() => setIsDeleteModalOpen(true)} className="flex items-center gap-2 px-3 py-2 text-rose-600 text-sm font-bold rounded-lg hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-400 transition-all border border-transparent hover:border-rose-200 mr-2">
                   <Trash2 className="w-4 h-4" /> 刪除此案件
                 </button>
               )}
 
               <div className="flex flex-col items-end gap-1">
                 <span className="text-[10px] font-bold text-slate-400">目前案件狀態</span>
-                <select value={projectData.status_name_snapshot} onChange={(e) => handleStatusChange(e.target.value)} disabled={isExporting} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-100">
-                  {statusDict.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                </select>
+                
+                <div className="relative" ref={statusDropdownRef}>
+                  <button 
+                    onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                    disabled={isExporting}
+                    className="flex items-center justify-between min-w-[140px] px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-100 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-shadow disabled:opacity-50"
+                  >
+                    {projectData.status_name_snapshot}
+                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2" />
+                  </button>
+                  
+                  {isStatusDropdownOpen && (
+                    <div className="absolute top-full mt-1 right-0 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95">
+                      {statusDict.map(s => (
+                        <button 
+                          key={s.id}
+                          onClick={() => handleStatusChange(s.name)}
+                          className={`px-4 py-2 text-sm font-bold text-left transition-colors ${projectData.status_name_snapshot === s.name ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
               </div>
-              <button onClick={handlePreviewPDF} disabled={isExporting} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50">
+              <button onClick={handlePreviewPDF} disabled={isExporting} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-all disabled:opacity-50">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} 
                 {isExporting ? '生成預覽中...' : '預覽並匯出報告'}
               </button>
@@ -423,18 +503,18 @@ export default function ProjectEvaluationPage() {
       <div className="max-w-[1600px] mx-auto w-full px-6 py-8 flex flex-col gap-6">
         <section className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
           <h2 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Lock className="w-4 h-4 text-slate-400"/> 專案負責人編制</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {['應用科', '企劃科', '科技科'].map(dept => (
-              <div key={dept} className="flex flex-col p-4 bg-slate-50 border border-slate-100 rounded-lg">
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+            {['應用科', '企劃科', '科技科', '唯讀檢視者'].map(dept => (
+              <div key={dept} className={`flex flex-col p-4 rounded-lg border ${dept === '唯讀檢視者' ? 'bg-indigo-50/50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs font-bold text-slate-600">{dept}</span>
-                  <button onClick={() => openUserModal(dept)} className="text-[10px] font-bold bg-white border border-slate-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 flex items-center gap-1 transition-colors"><UserPlus className="w-3 h-3"/> 指派</button>
+                  <span className={`text-xs font-bold ${dept === '唯讀檢視者' ? 'text-indigo-600' : 'text-slate-600'}`}>{dept}</span>
+                  <button onClick={() => openUserModal(dept)} className="text-[10px] font-bold bg-white border border-slate-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 flex items-center gap-1 transition-all"><UserPlus className="w-3 h-3"/> 指派</button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(projectData.team_members?.[dept] || []).length > 0 ? 
                     projectData.team_members[dept].map((name: string) => (
-                      <span key={name} className="text-xs font-bold bg-white border border-slate-200 px-2.5 py-1 rounded text-slate-700 shadow-sm flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div> {name}
+                      <span key={name} className={`text-xs font-bold bg-white border px-2.5 py-1 rounded shadow-sm flex items-center gap-1.5 ${dept === '唯讀檢視者' ? 'border-indigo-200 text-indigo-700' : 'border-slate-200 text-slate-700'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${dept === '唯讀檢視者' ? 'bg-indigo-500' : 'bg-blue-500'}`}></div> {name}
                       </span>
                     )) : <span className="text-xs text-slate-400 italic">尚未指派</span>
                   }
@@ -446,7 +526,8 @@ export default function ProjectEvaluationPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <GridBlock title="現行工作職掌與工作流程" dbField="workflow_text" />
-          <GridBlock title="現行作業痛點需求" dbField="pain_points_text" />
+          {/* 🚀 2. 綁定正確的 as_is_text */}
+          <GridBlock title="現行作業痛點需求" dbField="as_is_text" />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -470,7 +551,7 @@ export default function ProjectEvaluationPage() {
 
       {currentUser?.system_role === 'admin' && Object.keys(locks).length > 0 && (
         <div className="fixed bottom-8 right-8 z-50">
-          <button onClick={handleUnlockAll} className="bg-rose-600 text-white p-3.5 rounded-full shadow-xl flex items-center gap-2 text-sm font-bold hover:bg-rose-700 hover:scale-105 transition-all">
+          <button onClick={handleUnlockAll} className="bg-rose-600 text-white p-3.5 rounded-full shadow-xl flex items-center gap-2 text-sm font-bold hover:bg-rose-700 focus:outline-none focus:ring-4 focus:ring-rose-300 hover:scale-105 transition-all">
             <Unlock className="w-5 h-5"/> 解除編輯鎖定
           </button>
         </div>
@@ -488,8 +569,8 @@ export default function ProjectEvaluationPage() {
               此操作無法復原，與該案件相關的所有評估資料、圖片及鎖定紀錄都將一併被永久移除。
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setIsDeleteModalOpen(false)} disabled={isDeleting} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">取消</button>
-              <button onClick={handleDeleteProject} disabled={isDeleting} className="px-4 py-2 text-sm font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700 shadow-sm flex items-center gap-2 transition-colors disabled:opacity-50">
+              <button onClick={() => setIsDeleteModalOpen(false)} disabled={isDeleting} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 rounded-lg transition-all disabled:opacity-50">取消</button>
+              <button onClick={handleDeleteProject} disabled={isDeleting} className="px-4 py-2 text-sm font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1 shadow-sm flex items-center gap-2 transition-all disabled:opacity-50">
                 {isDeleting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>} 
                 {isDeleting ? '刪除中...' : '確認刪除'}
               </button>
@@ -498,17 +579,15 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 🚀 單位選擇 Modal：確保精確對應資料庫的 name 欄位 */}
       {isDeptModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Building2 className="w-4 h-4 text-slate-400"/> 選擇提案單位</h3>
-              <button onClick={() => setIsDeptModalOpen(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5"/></button>
+              <button onClick={() => setIsDeptModalOpen(false)} className="text-slate-400 hover:text-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-300 rounded"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto grid grid-cols-2 gap-3">
               {departmentsList.map((dept, index) => {
-                // 防呆：確保不論資料表欄位叫什麼，都能顯示文字
                 const displayName = dept.name || dept.dept_name || '未命名單位';
                 const deptId = dept.id || index;
                 const isSelected = projectData?.department === displayName;
@@ -517,7 +596,7 @@ export default function ProjectEvaluationPage() {
                   <button 
                     key={deptId} 
                     onClick={() => selectDepartment(displayName)} 
-                    className={`p-3 rounded-lg border text-sm font-bold transition-all text-center ${isSelected ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}
+                    className={`p-3 rounded-lg border text-sm font-bold transition-all text-center focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${isSelected ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'}`}
                   >
                     {displayName}
                   </button>
@@ -536,21 +615,24 @@ export default function ProjectEvaluationPage() {
           <div className="bg-white rounded-xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><UserPlus className="w-4 h-4 text-slate-400"/> 指派 {activeDept} 人員</h3>
-              <button onClick={() => setIsUserModalOpen(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5"/></button>
+              <button onClick={() => setIsUserModalOpen(false)} className="text-slate-400 hover:text-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-300 rounded"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto flex flex-col gap-2">
+              {/* 🚀 1. 拔除唯讀檢視者例外，所有單位都直接從 m01_users 對應的 department 篩選 */}
               {usersList.filter(u => u.department === activeDept).map(user => {
                 const isSelected = projectData.team_members?.[activeDept]?.includes(user.full_name);
                 return (
-                  <div key={user.id} onClick={() => toggleUserSelection(user.full_name)} className={`flex items-center justify-between p-3.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:border-blue-100'}`}>
-                    <span className={`text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{user.full_name}</span>
+                  <div key={user.id} onClick={() => toggleUserSelection(user.full_name)} className={`flex items-center justify-between p-3.5 rounded-lg border cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:border-blue-100'}`}>
+                    <div className="flex flex-col">
+                      <span className={`text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{user.full_name}</span>
+                    </div>
                     {isSelected && <Check className="w-4 h-4 text-blue-600" />}
                   </div>
                 );
               })}
             </div>
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <button onClick={() => setIsUserModalOpen(false)} className="px-5 py-2 bg-blue-600 text-white font-bold text-sm rounded hover:bg-blue-700">完成指派</button>
+              <button onClick={() => setIsUserModalOpen(false)} className="px-5 py-2 bg-blue-600 text-white font-bold text-sm rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-all">完成指派</button>
             </div>
           </div>
         </div>
@@ -558,8 +640,31 @@ export default function ProjectEvaluationPage() {
 
       {zoomedImage && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200] flex flex-col items-center justify-center p-8 animate-in fade-in" onClick={() => setZoomedImage(null)}>
-          <button className="absolute top-6 right-6 text-white bg-white/10 hover:bg-white/20 p-2 rounded-full"><X className="w-8 h-8"/></button>
+          <button className="absolute top-6 right-6 text-white bg-white/10 hover:bg-white/20 p-2 rounded-full focus:outline-none focus:ring-2 focus:ring-white"><X className="w-8 h-8"/></button>
           <img src={zoomedImage} className="max-w-full max-h-full object-contain shadow-2xl rounded" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
+      {isCompareModalOpen && images['AS-IS'] && images['TO-BE'] && (
+        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[200] flex flex-col p-6 animate-in fade-in">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-white text-xl font-bold flex items-center gap-2"><SplitSquareHorizontal className="w-5 h-5"/> AS-IS / TO-BE 雙圖對照</h2>
+            <button onClick={() => setIsCompareModalOpen(false)} className="text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors"><X className="w-6 h-6"/></button>
+          </div>
+          <div className="flex-1 flex gap-6 overflow-hidden">
+            <div className="flex-1 bg-slate-800 rounded-xl flex flex-col overflow-hidden border border-slate-700">
+               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase">現行架構 (AS-IS)</div>
+               <div className="flex-1 p-4 overflow-auto flex items-center justify-center">
+                  <img src={images['AS-IS']} className="max-w-full object-contain rounded" />
+               </div>
+            </div>
+            <div className="flex-1 bg-slate-800 rounded-xl flex flex-col overflow-hidden border border-slate-700">
+               <div className="bg-slate-700 text-slate-300 text-center py-2 text-xs font-bold tracking-widest uppercase">未來架構 (TO-BE)</div>
+               <div className="flex-1 p-4 overflow-auto flex items-center justify-center">
+                  <img src={images['TO-BE']} className="max-w-full object-contain rounded" />
+               </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -568,8 +673,8 @@ export default function ProjectEvaluationPage() {
           <div className="flex items-center justify-between bg-white rounded-t-xl px-6 py-4 border-b border-slate-200 shadow-xl">
              <h2 className="text-lg font-bold text-slate-800">PDF 匯出預覽 (共 {pdfPreviewData.length} 頁)</h2>
              <div className="flex gap-4">
-               <button onClick={() => setIsPreviewModalOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-               <button onClick={handleDownloadPDF} className="px-6 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow flex items-center gap-2"><FileDown className="w-4 h-4"/> 另存為 PDF</button>
+               <button onClick={() => setIsPreviewModalOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 rounded-lg transition-all">取消</button>
+               <button onClick={handleDownloadPDF} className="px-6 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 shadow flex items-center gap-2 transition-all"><FileDown className="w-4 h-4"/> 另存為 PDF</button>
              </div>
           </div>
           <div className="flex-1 bg-slate-200 overflow-y-auto p-8 flex flex-col gap-8 items-center rounded-b-xl shadow-inner">
@@ -583,7 +688,6 @@ export default function ProjectEvaluationPage() {
         </div>
       )}
 
-      {/* 隱藏 PDF 區塊 */}
       <div className="absolute left-[-9999px] top-0 bg-white text-black font-sans">
         
         {(() => {
@@ -626,7 +730,8 @@ export default function ProjectEvaluationPage() {
 
                 <div className="grid grid-cols-2 gap-4 flex-1 h-[250px] mb-4">
                    <PDFBlock title="現行工作職掌與工作流程" content={projectData?.workflow_text} />
-                   <PDFBlock title="現行作業痛點需求" content={projectData?.pain_points_text} />
+                   {/* 🚀 PDF也同步修正為 as_is_text */}
+                   <PDFBlock title="現行作業痛點需求" content={projectData?.as_is_text} />
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 flex-1 h-[200px]">
