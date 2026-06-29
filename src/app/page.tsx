@@ -26,14 +26,6 @@ const colorMap: Record<string, { ring: string, text: string, border: string, ico
   slate: { ring: 'ring-slate-500', text: 'text-slate-600', border: 'hover:border-slate-300', iconText: 'text-slate-500', badgeBg: 'bg-slate-50', badgeText: 'text-slate-600', badgeBorder: 'border-slate-200' },
 };
 
-// 🚀 嚴格鎖定 11 個有效評估欄位，用來同步計算 completeness
-const VALID_EVAL_FIELDS = [
-  'workflow_text', 'pain_points_text', 
-  'impact_people_text', 'impact_time_text', 'impact_benefit_text',
-  'AS-IS', 'TO-BE',
-  'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'
-];
-
 export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
@@ -50,15 +42,11 @@ export default function DashboardPage() {
     async function fetchDashboardData() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        let loggedInName = '';
         if (user) {
           setCurrentUserId(user.id);
           setCurrentUserEmail(user.email || '');
           const { data: profile } = await supabase.from('m01_users').select('full_name').eq('email', user.email).maybeSingle();
-          if (profile?.full_name) {
-            loggedInName = profile.full_name;
-            setCurrentUserName(loggedInName);
-          }
+          setCurrentUserName(profile?.full_name || '');
         }
         const [projRes, statRes] = await Promise.all([
           supabase.from('m01_projects').select('*').order('created_at', { ascending: false }),
@@ -66,20 +54,7 @@ export default function DashboardPage() {
         ]);
         if (projRes.error) throw projRes.error;
         if (statRes.error) throw statRes.error;
-        
-        const myData = (projRes.data || []).filter(proj => {
-          if (!loggedInName) return false;
-          const team = proj.team_members || {};
-          // 🚀 確保唯讀檢視者也被納入權限判斷中
-          const allMembers = [
-            ...(team['應用科']||[]), 
-            ...(team['企劃科']||[]), 
-            ...(team['科技科']||[]),
-            ...(team['唯讀檢視者']||[])
-          ].map(m => m.trim());
-          return allMembers.includes(loggedInName);
-        });
-        setProjects(myData);
+        setProjects(projRes.data || []);
         setStatusDict(statRes.data || []);
       } catch (error) {
         console.error('讀取資料失敗:', error);
@@ -98,12 +73,9 @@ export default function DashboardPage() {
   const calculateCompleteness = (proj: any) => {
     let score = 0;
     const confirmed = proj.confirmed_fields || {};
-    // 🚀 使用嚴格的 11 個有效欄位進行計算，排除髒資料
-    VALID_EVAL_FIELDS.forEach(f => { 
-      if (confirmed[f]) score++; 
-    });
-    // 確保不會超過 100%
-    return Math.min(100, Math.round((score / VALID_EVAL_FIELDS.length) * 100));
+    const fields = ['workflow_text', 'as_is_text', 'impact_people_text', 'impact_time_text', 'impact_benefit_text', 'image_as_is', 'image_to_be', 'eval_business', 'eval_technical', 'eval_kpi', 'eval_conclusion'];
+    fields.forEach(f => { if (confirmed[f]) score++; });
+    return Math.round((score / 11) * 100);
   };
 
   const handleRiskChange = async (projectId: string, newRisk: string) => {
@@ -125,13 +97,7 @@ export default function DashboardPage() {
 
   const getResponsiblesString = (proj: any) => {
     const team = proj.team_members || {};
-    // 🚀 將唯讀檢視者也加入負責人字串中，以便在清單上顯示及搜尋
-    const all = [
-      ...(team['應用科']||[]), 
-      ...(team['企劃科']||[]), 
-      ...(team['科技科']||[]),
-      ...(team['唯讀檢視者']||[])
-    ];
+    const all = [...(team['應用科']||[]), ...(team['企劃科']||[]), ...(team['科技科']||[])];
     return all.length > 0 ? all.join(', ') : '未指定';
   };
 
