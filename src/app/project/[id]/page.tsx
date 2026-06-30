@@ -541,7 +541,7 @@ export default function ProjectEvaluationPage() {
           <GridBlock title="業務面可行性評估" dbField="eval_business" />
           <GridBlock title="技術面可行性評估" dbField="eval_technical" />
           <GridBlock title="專案成效追蹤指標 (KPI)" dbField="eval_kpi" />
-          <GridBlock title="評估委員會綜合結論" dbField="eval_conclusion" />
+          <GridBlock title="綜合評估結論" dbField="eval_conclusion" />
         </div>
       </div>
 
